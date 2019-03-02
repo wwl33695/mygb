@@ -646,109 +646,10 @@ void checkerror(int rtperr)
 	if (rtperr < 0)
 	{
 		std::cout << "ERROR: " << RTPGetErrorString(rtperr) << std::endl;
+		return;
 		exit(-1);
 	}
 }
-
-class MyRTPSession : public RTPSession
-{
-protected:
-	void OnNewSource(RTPSourceData *dat)
-	{
-		if (dat->IsOwnSSRC())
-			return;
-
-		uint32_t ip;
-		uint16_t port;
-
-		if (dat->GetRTPDataAddress() != 0)
-		{
-			const RTPIPv4Address *addr = (const RTPIPv4Address *)(dat->GetRTPDataAddress());
-			ip = addr->GetIP();
-			port = addr->GetPort();
-		}
-		else if (dat->GetRTCPDataAddress() != 0)
-		{
-			const RTPIPv4Address *addr = (const RTPIPv4Address *)(dat->GetRTCPDataAddress());
-			ip = addr->GetIP();
-			port = addr->GetPort() - 1;
-		}
-		else
-			return;
-
-		RTPIPv4Address dest(ip, port);
-		AddDestination(dest);
-
-		struct in_addr inaddr;
-		inaddr.s_addr = htonl(ip);
-		std::cout << "Adding destination " << std::string(inet_ntoa(inaddr)) << ":" << port << std::endl;
-	}
-
-	void OnBYEPacket(RTPSourceData *dat)
-	{
-		if (dat->IsOwnSSRC())
-			return;
-
-		uint32_t ip;
-		uint16_t port;
-
-		if (dat->GetRTPDataAddress() != 0)
-		{
-			const RTPIPv4Address *addr = (const RTPIPv4Address *)(dat->GetRTPDataAddress());
-			ip = addr->GetIP();
-			port = addr->GetPort();
-		}
-		else if (dat->GetRTCPDataAddress() != 0)
-		{
-			const RTPIPv4Address *addr = (const RTPIPv4Address *)(dat->GetRTCPDataAddress());
-			ip = addr->GetIP();
-			port = addr->GetPort() - 1;
-		}
-		else
-			return;
-
-		RTPIPv4Address dest(ip, port);
-		DeleteDestination(dest);
-
-		struct in_addr inaddr;
-		inaddr.s_addr = htonl(ip);
-		std::cout << "Deleting destination " << std::string(inet_ntoa(inaddr)) << ":" << port << std::endl;
-	}
-
-	void OnRemoveSource(RTPSourceData *dat)
-	{
-		if (dat->IsOwnSSRC())
-			return;
-		if (dat->ReceivedBYE())
-			return;
-
-		uint32_t ip;
-		uint16_t port;
-
-		if (dat->GetRTPDataAddress() != 0)
-		{
-			const RTPIPv4Address *addr = (const RTPIPv4Address *)(dat->GetRTPDataAddress());
-			ip = addr->GetIP();
-			port = addr->GetPort();
-		}
-		else if (dat->GetRTCPDataAddress() != 0)
-		{
-			const RTPIPv4Address *addr = (const RTPIPv4Address *)(dat->GetRTCPDataAddress());
-			ip = addr->GetIP();
-			port = addr->GetPort() - 1;
-		}
-		else
-			return;
-
-		RTPIPv4Address dest(ip, port);
-		DeleteDestination(dest);
-
-		struct in_addr inaddr;
-		inaddr.s_addr = htonl(ip);
-		std::cout << "Deleting destination " << std::string(inet_ntoa(inaddr)) << ":" << port << std::endl;
-	}
-};
-
 
 /*
 运用开源库进行数据获取
@@ -767,7 +668,7 @@ static unsigned __stdcall jrtplib_rtp_recv_thread(void* arg)
 	RTPSession sess;
 	uint16_t portbase;
 	std::string ipstr;
-	int status, i, num;
+	int i, num;
 
 	RTPUDPv4TransmissionParams transparams;
 	RTPSessionParams sessparams;
@@ -778,8 +679,12 @@ static unsigned __stdcall jrtplib_rtp_recv_thread(void* arg)
 
 	sessparams.SetAcceptOwnPackets(true);
 	transparams.SetPortbase(portbase);
-	status = sess.Create(sessparams, &transparams);
-	checkerror(status);
+	int status = sess.Create(sessparams, &transparams);
+	if (status < 0)
+	{
+		std::cout << "ERROR: " << RTPGetErrorString(status) << std::endl;
+		return -1;
+	}
 
 	//写入视频文件
 	//获取当前程序路径
@@ -804,6 +709,18 @@ static unsigned __stdcall jrtplib_rtp_recv_thread(void* arg)
 		{
 			do
 			{
+				RTPSourceData *source = sess.GetCurrentSourceInfo();
+				RTPIPv4Address *addr = (RTPIPv4Address*)source->GetRTPDataAddress();
+				uint32_t ip = htonl(addr->GetIP());
+				char ipstr[16] = {0};
+				char* ipptr = (char*)&ip;
+				sprintf(ipstr, "%u.%u.%u.%u", (uint8_t)ipptr[0], (uint8_t)ipptr[1], (uint8_t)ipptr[2], (uint8_t)ipptr[3]);
+
+				uint16_t rtpport = addr->GetPort();
+//				addr = (RTPIPv4Address*)source->GetRTCPDataAddress();
+//				uint16_t rtcpport = addr->GetPort();
+				printf("ip = %u, ipstr=%s, rtpport = %u \n", ip, ipstr, rtpport);
+
 				RTPPacket *pack;
 
 				while ((pack = sess.GetNextPacket()) != NULL)
@@ -941,7 +858,8 @@ static unsigned __stdcall rtp_recv_thread(void *arg)
 			//打印视频流
 			fprintf(g_fp, "符合要求的数据%x,,%x,,%x,,%x\n", ptr[0], ptr[1], ptr[2], ptr[3]);
 			//视频流解析
-			if (/*(*//*(*/ptr[0] == 0x00 && ptr[1] == 0x00 && ptr[2] == 0x01 && ptr[3] == 0xffffffBA/*) *//*|| (ptr[0] == 0x00 && ptr[1] == 0x00 && ptr[2] == 0x01 && ptr[3] == 0xBA)*//*) */ && psLen > 0)
+			if (/*(*//*(*/ptr[0] == 0x00 && ptr[1] == 0x00 && ptr[2] == 0x01 && ptr[3] == 0xffffffBA
+				/*) *//*|| (ptr[0] == 0x00 && ptr[1] == 0x00 && ptr[2] == 0x01 && ptr[3] == 0xBA)*//*) */ && psLen > 0)
 			{
 				if (cnt % 10000 == 0)
 				{
@@ -1132,7 +1050,7 @@ static unsigned __stdcall gb28181ServerThread(void *arg)
 	iReturnCode = eXosip_listen_addr(eCtx, IPPROTO_UDP, NULL, p28181Params->localSipPort, AF_INET, 0);
 	if (iReturnCode != OSIP_SUCCESS)
 	{
-		printf("eXosip_listen_addr error!");
+		printf("eXosip_listen_addr udp error!");
 		return NULL;
 	}
 
@@ -1148,8 +1066,6 @@ static unsigned __stdcall gb28181ServerThread(void *arg)
 
 	return 0;
 }
-
-#if 1
 
 //请求视频信息，SDP信息
 static int sendInvitePlay(char *playSipId, int rtp_recv_port, gb28181Params *p28181Params)
@@ -1192,69 +1108,6 @@ static int sendInvitePlay(char *playSipId, int rtp_recv_port, gb28181Params *p28
 
 	return 0;
 }
-
-#else
-
-//请求视频信息，SDP信息
-static int sendInvitePlay(char *playSipId, int rtp_recv_port, gb28181Params *p28181Params)
-{
-	char dest_call[256], source_call[256], subject[128];
-	osip_message_t *invite = NULL;
-	int ret;
-	struct eXosip_t *peCtx = p28181Params->eCtx;
-
-	_snprintf(dest_call, 256, "sip:%s@%s:%d", playSipId, p28181Params->platformIpAddr, p28181Params->platformSipPort);
-	_snprintf(source_call, 256, "sip:%s@%s", p28181Params->localSipId, p28181Params->localIpAddr);
-	_snprintf(subject, 128, "%s:0,%s:0", playSipId, p28181Params->localSipId);
-	ret = eXosip_call_build_initial_invite(peCtx, &invite, dest_call, source_call, NULL, subject);
-	if (ret != 0)
-	{
-		//APP_ERR("eXosip_call_build_initial_invite failed, %s,%s,%s", dest_call, source_call, subject);
-		return -1;
-	}
-
-	//sdp
-	char body[500];
-	/*int bodyLen = _snprintf(body, 500,
-	"v=0\r\n"
-	"o=%s 0 0 IN IP4 %s\r\n"
-	"s=Play\r\n"
-	"c=IN IP4 %s\r\n"
-	"t=0 0\r\n"
-	"m=video %d RTP/AVP 96 97 98\r\n"
-	"a=rtpmap:96 PS/90000\r\n"
-	"a=rtpmap:97 MPEG4/90000\r\n"
-	"a=rtpmap:98 H264/90000\r\n"
-	"a=recvonly\r\n"
-	"y=0100000001\n", playSipId, p28181Params->localIpAddr,
-	p28181Params->localIpAddr, rtp_recv_port);*/
-
-	int bodyLen = _snprintf(body, 500, "v=0\n"
-		"o=%s 0 0 IN IP4 %s\n"
-		"s=Play\n"
-		"c=IN IP4 %s\n"
-		"t=0 0\n"
-		"m=video %d RTP/AVP 96 98 97\n"
-		"a=recvonly\n"
-		"a=rtpmap:96 PS/90000\n"
-		"a=rtpmap:98 H264/90000\n"
-		"a=rtpmap:97 MPEG4/90000\n"
-		"y=0100000001\n",
-		playSipId,
-		p28181Params->localIpAddr,
-		p28181Params->localIpAddr,
-		rtp_recv_port);
-
-	osip_message_set_body(invite, body, bodyLen);
-	osip_message_set_content_type(invite, "APPLICATION/SDP");
-	eXosip_lock(peCtx);
-	eXosip_call_send_initial_invite(peCtx, invite);
-	eXosip_unlock(peCtx);
-
-	return 0;
-}
-
-#endif
 
 //停止视频回传
 static int sendPlayBye(gb28181Params *p28181Params)
@@ -1463,17 +1316,13 @@ int main(int argc, char *argv[])
 	int tmpCnt = 0;
 	while ( !g_liveVideoParams.gb28181Param.registerOk )
 	{
-//		printf("waiting register %d...\n", tmpCnt);
-//		fprintf(g_fp, "waiting register %d...\n", tmpCnt++);
 		Sleep(1000);
-//		if (tmpCnt == 0)
-//			exit(-1);
 	}
 
 //	return 0;
 
 	//发送请求catalog消息
-	sendQueryCatalog(&(g_liveVideoParams.gb28181Param));
+//	sendQueryCatalog(&(g_liveVideoParams.gb28181Param));
 
 	//接收视频流
 	startStreamRecv(&g_liveVideoParams);
@@ -1486,7 +1335,7 @@ int main(int argc, char *argv[])
 	while (g_liveVideoParams.running)
 	{
 		i++;
-		checkCameraStatus(&g_liveVideoParams);
+//		checkCameraStatus(&g_liveVideoParams);
 		Sleep(2000);
 //		if (i == 20)
 //			break;
