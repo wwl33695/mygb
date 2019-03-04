@@ -89,15 +89,6 @@ using namespace jrtplib;
 #pragma comment(lib,"WS2_32.lib")
 #endif
 
-#define APREFIX_NONE   "\033[0m"
-#define APREFIX_RED    "\033[0;31m"
-#define APREFIX_GREEN  "\033[0;32m"
-#define APREFIX_YELLOW "\033[1;33m"
-
-#define APP_DEBUG(format, args) printf(APREFIX_GREEN"DEBUG : FILE -> %s, %s, LINE -> %d :"  format APREFIX_NONE"\n", __FILE__, __FUNCTION__, __LINE__, ## args)
-#define APP_WARRING(format, args) printf(APREFIX_YELLOW"WARRING : FILE -> %s, %s, LINE -> %d :"  format APREFIX_NONE"\n", __FILE__, __FUNCTION__, __LINE__, ## args)
-#define APP_ERR(format, args) printf(APREFIX_RED"ERR : FILE -> %s, %s, LINE -> %d :"  format APREFIX_NONE"\n", __FILE__, __FUNCTION__, __LINE__, ## args)
-
 #define CAMERA_SUPPORT_MAX      500
 #define RTP_MAXBUF          4096
 #define PS_BUF_SIZE         (1024*1024*4)
@@ -136,77 +127,6 @@ typedef struct _liveVideoStreamParams{
 	int stream_input_type;
 	int running;
 } liveVideoStreamParams;
-
-#if 1
-#ifndef uint16_t
-typedef unsigned short uint16_t;
-#endif
-#ifndef uint32_t
-typedef unsigned int uint32_t;
-#endif
-//#ifndef uint64_t
-//typedef unsigned int uint64_t;
-//#endif
-
-typedef struct RTP_HEADER
-{
-	uint16_t cc : 4;
-	uint16_t extbit : 1;
-	uint16_t padbit : 1;
-	uint16_t version : 2;
-	uint16_t paytype : 7;  //负载类型
-	uint16_t markbit : 1;  //1表示前面的包为一个解码单元,0表示当前解码单元未结束
-	uint16_t seq_number;  //序号
-	uint32_t timestamp; //时间戳
-	uint32_t ssrc;  //循环校验码
-	//uint32_t csrc[16];
-} RTP_header_t;
-#elif
-
-typedef struct PTR_HEADER
-{
-	unsigned int cc : 4;
-	unsigned int extbit : 1;
-	unsigned int padbit : 1;
-	unsigned int version : 2;
-	unsigned int paytype : 7;  //负载类型
-	unsigned int markbit : 1;  //1表示前面的包为一个解码单元,0表示当前解码单元未结束
-	unsigned int seq_number;  //序号
-	unsigned int timestamp; //时间戳
-	unsigned int ssrc;  //循环校验码
-}RTP_header_t;
-
-#endif
-
-#pragma pack (1)
-typedef union littel_endian_size_s {
-	unsigned short int	length;
-	unsigned char		byte[2];
-} littel_endian_size;
-
-typedef struct pack_start_code_s {
-	unsigned char start_code[3];
-	unsigned char stream_id[1];
-} pack_start_code;
-
-typedef struct program_stream_pack_header_s {
-	pack_start_code PackStart;// 4
-	unsigned char Buf[9];
-	unsigned char stuffinglen;
-} program_stream_pack_header;
-
-typedef struct program_stream_map_s {
-	pack_start_code PackStart;
-	littel_endian_size PackLength;//we mast do exchange
-} program_stream_map;
-
-typedef struct program_stream_e_s {
-	pack_start_code		PackStart;
-	littel_endian_size	PackLength;//we mast do exchange
-	char				PackInfo1[2];
-	unsigned char		stuffing_length;
-} program_stream_e;
-
 
 //相机信息和视频信息
 liveVideoStreamParams g_liveVideoParams;
@@ -412,7 +332,7 @@ static void *MsgProcess(gb28181Params *p28181Params, void * pvSClientGB)
 }
 
 //初始化udp套接字
-int init_udpsocket(int port, struct sockaddr_in *servaddr, char *mcast_addr)
+int init_udpsocket(int port, struct sockaddr_in *servaddr)
 {
 	int err = -1;
 	int socket_fd;
@@ -420,7 +340,7 @@ int init_udpsocket(int port, struct sockaddr_in *servaddr, char *mcast_addr)
 	socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (socket_fd < 0)
 	{
-		APP_ERR("socket failed, port:%d", port);
+		printf("socket failed, port:%d", port);
 		return -1;
 	}
 
@@ -432,7 +352,7 @@ int init_udpsocket(int port, struct sockaddr_in *servaddr, char *mcast_addr)
 	err = bind(socket_fd, (struct sockaddr*)servaddr, sizeof(struct sockaddr_in));
 	if (err < 0)
 	{
-		APP_ERR("bind failed, port:%d", port);
+		printf("bind failed, port:%d", port);
 		return -2;
 	}
 
@@ -442,7 +362,7 @@ int init_udpsocket(int port, struct sockaddr_in *servaddr, char *mcast_addr)
 	//err = setsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
 	if (err < 0)
 	{
-		APP_ERR("setsockopt IP_MULTICAST_LOOP failed, port:%d", port);
+		printf("setsockopt IP_MULTICAST_LOOP failed, port:%d", port);
 		return -3;
 	}
 
@@ -450,195 +370,10 @@ int init_udpsocket(int port, struct sockaddr_in *servaddr, char *mcast_addr)
 }
 
 //关闭套接字
-void release_udpsocket(int socket_fd, char *mcast_addr)
+void release_udpsocket(int socket_fd)
 {
 	closesocket(socket_fd);
 }
-
-int inline ProgramStreamPackHeader(char* Pack, int length, char **NextPack, int *leftlength)
-{
-	//printf("[%s]%x %x %x %x\n", __FUNCTION__, Pack[0], Pack[1], Pack[2], Pack[3]);
-	//通过 00 00 01 ba头的第14个字节的最后3位来确定头部填充了多少字节
-	program_stream_pack_header *PsHead = (program_stream_pack_header *)Pack;
-	unsigned char pack_stuffing_length = PsHead->stuffinglen & '\x07';
-
-	*leftlength = length - sizeof(program_stream_pack_header)-pack_stuffing_length;//减去头和填充的字节
-	*NextPack = Pack + sizeof(program_stream_pack_header)+pack_stuffing_length;
-	if (*leftlength<4)
-		return 0;
-
-	return *leftlength;
-}
-
-
-inline int ProgramStreamMap(char* Pack, int length, char **NextPack, int *leftlength, char **PayloadData, int *PayloadDataLen)
-{
-	program_stream_map* PSMPack = (program_stream_map*)Pack;
-
-	//no payload
-	*PayloadData = 0;
-	*PayloadDataLen = 0;
-
-	if ((unsigned int)length < sizeof(program_stream_map)) return 0;
-
-	littel_endian_size psm_length;
-	psm_length.byte[0] = PSMPack->PackLength.byte[1];
-	psm_length.byte[1] = PSMPack->PackLength.byte[0];
-
-	*leftlength = length - psm_length.length - sizeof(program_stream_map);
-	if (*leftlength <= 0) return 0;
-
-	*NextPack = Pack + psm_length.length + sizeof(program_stream_map);
-
-	return *leftlength;
-}
-
-inline int ProgramShHead(char* Pack, int length, char **NextPack, int *leftlength, char **PayloadData, int *PayloadDataLen)
-{
-	program_stream_map* PSMPack = (program_stream_map*)Pack;
-
-	//no payload
-	*PayloadData = 0;
-	*PayloadDataLen = 0;
-
-	if ((unsigned int)length < sizeof(program_stream_map)) return 0;
-
-	littel_endian_size psm_length;
-	psm_length.byte[0] = PSMPack->PackLength.byte[1];
-	psm_length.byte[1] = PSMPack->PackLength.byte[0];
-
-	*leftlength = length - psm_length.length - sizeof(program_stream_map);
-	if (*leftlength <= 0)
-		return 0;
-
-	*NextPack = Pack + psm_length.length + sizeof(program_stream_map);
-
-	return *leftlength;
-}
-
-//PS流解包
-inline int Pes(char* Pack, int length, char **NextPack, int *leftlength, char **PayloadData, int *PayloadDataLen)
-{
-	program_stream_e* PSEPack = (program_stream_e*)Pack;
-
-	*PayloadData = 0;
-	*PayloadDataLen = 0;
-
-	if ((unsigned int)length < sizeof(program_stream_e)) return 0;
-
-	littel_endian_size pse_length;
-	pse_length.byte[0] = PSEPack->PackLength.byte[1];
-	pse_length.byte[1] = PSEPack->PackLength.byte[0];
-
-	*PayloadDataLen = pse_length.length - 2 - 1 - PSEPack->stuffing_length;
-	if (*PayloadDataLen>0)
-		*PayloadData = Pack + sizeof(program_stream_e)+PSEPack->stuffing_length;
-
-	*leftlength = length - pse_length.length - sizeof(pack_start_code)-sizeof(littel_endian_size);
-	if (*leftlength <= 0) return 0;
-
-	*NextPack = Pack + sizeof(pack_start_code)+sizeof(littel_endian_size)+pse_length.length;
-
-	return *leftlength;
-}
-
-//trp解析h264视频信息
-int inline GetH246FromPs(char* buffer, int length, char *h264Buffer, int *h264length, char *sipId)
-{
-	int leftlength = 0;
-	char *NextPack = 0;
-
-	*h264length = 0;
-
-	if (ProgramStreamPackHeader(buffer, length, &NextPack, &leftlength) == 0)
-		return 0;
-
-	char *PayloadData = NULL;
-	int PayloadDataLen = 0;
-
-	while ((unsigned int)leftlength >= sizeof(pack_start_code))
-	{
-		PayloadData = NULL;
-		PayloadDataLen = 0;
-
-		if (NextPack
-			&& NextPack[0] == '\x00'
-			&& NextPack[1] == '\x00'
-			&& NextPack[2] == '\x01'
-			&& NextPack[3] == '\xE0')
-		{
-			//接着就是流包，说明是非i帧
-			if (Pes(NextPack, leftlength, &NextPack, &leftlength, &PayloadData, &PayloadDataLen))
-			{
-				if (PayloadDataLen)
-				{
-					if (PayloadDataLen + *h264length < H264_FRAME_SIZE_MAX)
-					{
-						memcpy(h264Buffer, PayloadData, PayloadDataLen);
-						h264Buffer += PayloadDataLen;
-						*h264length += PayloadDataLen;
-					}
-					else
-					{
-						APP_WARRING("h264 frame size exception!! %d:%d", PayloadDataLen, *h264length);
-					}
-				}
-			}
-			else
-			{
-				if (PayloadDataLen)
-				{
-					if (PayloadDataLen + *h264length < H264_FRAME_SIZE_MAX)
-					{
-						memcpy(h264Buffer, PayloadData, PayloadDataLen);
-						h264Buffer += PayloadDataLen;
-						*h264length += PayloadDataLen;
-					}
-					else
-					{
-						APP_WARRING("h264 frame size exception!! %d:%d", PayloadDataLen, *h264length);
-					}
-				}
-				break;
-			}
-		}
-		else if (NextPack
-			&& NextPack[0] == '\x00'
-			&& NextPack[1] == '\x00'
-			&& NextPack[2] == '\x01'
-			&& NextPack[3] == '\xBB')
-		{
-			if (ProgramShHead(NextPack, leftlength, &NextPack, &leftlength, &PayloadData, &PayloadDataLen) == 0)
-				break;
-		}
-		else if (NextPack
-			&& NextPack[0] == '\x00'
-			&& NextPack[1] == '\x00'
-			&& NextPack[2] == '\x01'
-			&& NextPack[3] == '\xBC')
-		{
-			if (ProgramStreamMap(NextPack, leftlength, &NextPack, &leftlength, &PayloadData, &PayloadDataLen) == 0)
-				break;
-		}
-		else if (NextPack
-			&& NextPack[0] == '\x00'
-			&& NextPack[1] == '\x00'
-			&& NextPack[2] == '\x01'
-			&& (NextPack[3] == '\xC0' || NextPack[3] == '\xBD'))
-		{
-			printf("audio ps frame, skip it\n");
-			break;
-		}
-		else
-		{
-			printf("[%s]no know %x %x %x %x\n", sipId, NextPack[0], NextPack[1], NextPack[2], NextPack[3]);
-			break;
-		}
-	}
-
-	return *h264length;
-}
-
 
 //查错
 void checkerror(int rtperr)
@@ -651,14 +386,118 @@ void checkerror(int rtperr)
 	}
 }
 
-/*
-运用开源库进行数据获取
-*/
+typedef int (*h264framecallback)(char* data, int length, void* usrdata);
+
+class PsPacketParser {
+public:
+	void Parse(const char* data, size_t size) {
+		if (size < 14 || 0xba010000 != *(int32_t*)data) return;
+		int extlen = uint8_t(data[13]) & 0x07;
+		if (size <= 14 + extlen) return;
+
+		const char * buffer = data + (14 + extlen);
+		int length = size - extlen - 14;
+		while (length > 0) {
+			if (length < 6) break;
+			int32_t chunk_flag = *(int32_t*)buffer;
+			uint16_t chunk_size = ntohs(*(uint16_t*)(buffer + 4));
+			if (chunk_size + 6 > length) break;
+
+			switch (chunk_flag)	{
+			case 0xe0010000:
+				ParsePes(buffer + 6, chunk_size);
+				break;
+			}
+
+			buffer += (6 + chunk_size);
+			length -= (6 + chunk_size);
+		}
+	}
+
+	void setcallback(h264framecallback _callback, void* _usrdata){
+		callback = _callback;
+		usrdata = _usrdata;
+	}
+private:
+	void ParsePes(const char* data, size_t size) {
+		if (size > 3){
+			int32_t len = uint8_t(data[2]) + 3;
+			if (size > len && callback)
+				callback((char*)data + len, size - len, usrdata);
+		}
+	}
+
+private:
+	h264framecallback callback;
+	void *usrdata;
+};
+PsPacketParser parser;
+
+int myh264framecallback(char* data, int length, void* usrdata)
+{
+	CameraParams *p = (CameraParams *)usrdata;
+
+	fwrite(data, 1, length, p->fpH264);
+
+	return 0;
+}
+
+int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPayloadLength, CameraParams *p)
+{
+	static uint32_t cnt = 0;
+	if (rtpPayloadLength <= 0)
+	{
+		perror("recvfrom() long");
+		return -1;
+	}
+
+	char* ptr = psBuf + psLen;			//最新数据的头
+	if (psLen + rtpPayloadLength < PS_BUF_SIZE)
+	{
+		memcpy(ptr, rtpPayload, rtpPayloadLength);
+	}
+	else
+	{
+		printf("psBuf memory overflow, %d\n", psLen + rtpPayloadLength);
+		psLen = 0;
+		return -1;
+	}
+
+	//视频流解析
+	if (psLen > 0 && 
+		ptr[0] == 0x00 && ptr[1] == 0x00 && ptr[2] == 0x01 && ptr[3] == 0xffffffBA)
+	{
+		if (cnt % 25 == 0)
+		{
+			p->status = 1;
+		}
+
+		parser.Parse(psBuf, psLen);
+
+		memcpy(psBuf, ptr, rtpPayloadLength);
+		psLen = 0;
+		cnt++;
+	}
+	psLen += rtpPayloadLength;
+
+	return 0;
+}
 
 static unsigned __stdcall jrtplib_rtp_recv_thread(void* arg)
 {
 	//获取相机参数
 	CameraParams *p = (CameraParams *)arg;
+	parser.setcallback(myh264framecallback, arg);
+
+	char *psBuf = (char *)malloc(PS_BUF_SIZE);
+	if (psBuf == NULL)
+	{
+		//APP_ERR("malloc failed");
+		printf("malloc failed");
+		return NULL;
+	}
+	memset(psBuf, '\0', PS_BUF_SIZE);
+	uint32_t psLen = 0;
 
 #ifdef WIN32
 	WSADATA dat;
@@ -695,10 +534,11 @@ static unsigned __stdcall jrtplib_rtp_recv_thread(void* arg)
 	p->fpH264 = fopen(filename, "wb");
 	if (p->fpH264 == NULL)
 	{
-		APP_ERR("fopen %s failed", filename);
+		printf("fopen %s failed", filename);
 		return NULL;
 	}
 
+	uint32_t last_ts = 0;
 	//开始接收流包
 	while (p->running)
 	{
@@ -715,10 +555,7 @@ static unsigned __stdcall jrtplib_rtp_recv_thread(void* arg)
 				char ipstr[16] = {0};
 				char* ipptr = (char*)&ip;
 				sprintf(ipstr, "%u.%u.%u.%u", (uint8_t)ipptr[0], (uint8_t)ipptr[1], (uint8_t)ipptr[2], (uint8_t)ipptr[3]);
-
 				uint16_t rtpport = addr->GetPort();
-//				addr = (RTPIPv4Address*)source->GetRTCPDataAddress();
-//				uint16_t rtcpport = addr->GetPort();
 				printf("ip = %u, ipstr=%s, rtpport = %u \n", ip, ipstr, rtpport);
 
 				RTPPacket *pack;
@@ -730,9 +567,15 @@ static unsigned __stdcall jrtplib_rtp_recv_thread(void* arg)
 					printf("Got packet! %d \n", pack->GetPayloadLength());
 
 					//std::cout << pack->GetPayloadData() << std::endl;
+					uint32_t ts = pack->GetTimestamp();
+					if (ts >= last_ts)
+					{
+						ParsePsStream(psBuf, psLen, (char*)pack->GetPayloadData(), pack->GetPayloadLength(), p);
+						last_ts = ts;
+					}
 
 					//写入文件
-					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
+//					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
 					// we don't longer need the packet, so
 					// we'll delete it
 					sess.DeletePacket(pack);
@@ -757,227 +600,9 @@ static unsigned __stdcall jrtplib_rtp_recv_thread(void* arg)
 #endif // WIN32
 
 	fclose(p->fpH264);
-	p->fpH264 == NULL;
+	p->fpH264 = NULL;
 
 	return 0;
-}
-
-/*
-以下函数接收视频花屏太严重，经过考虑专用另一个开源库进行rtp流的获取
-*/
-
-//接收相机回传的rtp视频流
-static unsigned __stdcall rtp_recv_thread(void *arg)
-{
-	int socket_fd;
-	CameraParams *p = (CameraParams *)arg;
-	int rtp_port = p->recvPort;
-	struct sockaddr_in servaddr;
-
-	socket_fd = init_udpsocket(rtp_port, &servaddr, NULL);
-	if (socket_fd >= 0)
-	{
-		printf("start socket port %d success\n", rtp_port);
-	}
-
-	char *buf = (char *)malloc(RTP_MAXBUF);
-	if (buf == NULL)
-	{
-		fprintf(g_fp, "malloc failed buf");
-		printf("malloc failed buf");
-		return NULL;
-	}
-	char *psBuf = (char *)malloc(PS_BUF_SIZE);
-	if (psBuf == NULL)
-	{
-		//APP_ERR("malloc failed");
-		printf("malloc failed");
-		return NULL;
-	}
-	memset(psBuf, '\0', PS_BUF_SIZE);
-	char *h264buf = (char *)malloc(H264_FRAME_SIZE_MAX);
-	if (h264buf == NULL)
-	{
-		//APP_ERR("malloc failed");
-		printf("malloc failed");
-		return NULL;
-	}
-	int recvLen;
-	int addr_len = sizeof(struct sockaddr_in);
-	int rtpHeadLen = sizeof(RTP_header_t);
-
-	//写入视频文件
-	//获取当前程序路径
-	std::string strPath = GetMoudlePath();
-	char filename[MAX_PATH];
-	strPath += p->sipId;
-	_snprintf(filename, 128, "%s1234.264", strPath.c_str());
-	p->fpH264 = fopen(filename, "wb");
-	if (p->fpH264 == NULL)
-	{
-		APP_ERR("fopen %s failed", filename);
-		return NULL;
-	}
-
-	APP_DEBUG("%s:%d starting ...", p->sipId, p->recvPort);
-
-	int cnt = 0;
-	int rtpPsLen, h264length, psLen = 0;
-	char *ptr;
-	memset(buf, 0, RTP_MAXBUF);
-
-	ptr = (char*)malloc(PS_BUF_SIZE);
-	memset(ptr, 0, PS_BUF_SIZE);
-	int ntotal = 0;
-	while (p->running)
-	{
-		//接收到的rtp流数据长度
-		recvLen = recvfrom(socket_fd, buf, RTP_MAXBUF, 0, (struct sockaddr*)&servaddr, (int*)&addr_len);
-
-		//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
-		if (recvLen > rtpHeadLen)
-		{
-			unsigned char *buffer = (unsigned char *)buf;
-
-			//写入文件
-			fprintf(g_fp, "符合要求的数据---------------------%x,,%x,,%x,,%x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
-			ptr = psBuf + psLen;			//最新数据的头
-			rtpPsLen = recvLen - rtpHeadLen;
-#if 1
-			if (psLen + rtpPsLen < PS_BUF_SIZE)
-			{
-				memcpy(ptr, buf + rtpHeadLen, rtpPsLen);
-			}
-			else
-			{
-				APP_WARRING("psBuf memory overflow, %d\n", psLen + rtpPsLen);
-				psLen = 0;
-				continue;
-			}
-#endif
-			//打印视频流
-			fprintf(g_fp, "符合要求的数据%x,,%x,,%x,,%x\n", ptr[0], ptr[1], ptr[2], ptr[3]);
-			//视频流解析
-			if (/*(*//*(*/ptr[0] == 0x00 && ptr[1] == 0x00 && ptr[2] == 0x01 && ptr[3] == 0xffffffBA
-				/*) *//*|| (ptr[0] == 0x00 && ptr[1] == 0x00 && ptr[2] == 0x01 && ptr[3] == 0xBA)*//*) */ && psLen > 0)
-			{
-				if (cnt % 10000 == 0)
-				{
-					printf("rtpRecvPort:%d, cnt:%d, pssize:%d\n", rtp_port, cnt++, psLen);
-				}
-				if (cnt % 25 == 0)
-				{
-					p->status = 1;
-				}
-				GetH246FromPs((char *)psBuf, psLen, h264buf, &h264length, p->sipId);			//如果
-				if (h264length > 0)
-				{
-					//写入文件
-					fwrite(h264buf, 1, h264length, p->fpH264);
-				}
-				memcpy(psBuf, ptr, rtpPsLen);
-				psLen = 0;
-				cnt++;
-			}
-			/*else if (psLen > 0)
-			{
-			memcpy(psBuf + psLen, ptr, rtpPsLen);
-			}*/
-			psLen += rtpPsLen;
-		}
-		else
-		{
-			perror("recvfrom() long");
-		}
-
-		if (recvLen > 1500)
-		{
-			printf("udp frame exception, %d\n", recvLen);
-		}
-	}
-
-	release_udpsocket(socket_fd, NULL);
-	if (buf != NULL)
-	{
-		free(buf);
-	}
-	if (psBuf != NULL)
-	{
-		free(psBuf);
-	}
-	if (h264buf != NULL)
-	{
-		free(h264buf);
-	}
-	if (p->fpH264 != NULL)
-	{
-		fclose(p->fpH264);
-		p->fpH264 = NULL;
-		fclose(g_fp);
-		g_fp = NULL;
-	}
-
-	APP_DEBUG("%s:%d run over", p->sipId, p->recvPort);
-
-	return NULL;
-}
-
-static unsigned __stdcall stream_keep_alive_thread(void *arg)
-{
-	int socket_fd;
-	CameraParams *p = (CameraParams *)arg;
-	int rtcp_port = p->recvPort + 1;
-	struct sockaddr_in servaddr;
-
-	SYSTEMTIME st;
-
-	socket_fd = init_udpsocket(rtcp_port, &servaddr, NULL);
-	if (socket_fd >= 0)
-	{
-		printf("start socket port %d success\n", rtcp_port);
-	}
-
-	char *buf = (char *)malloc(1024);
-	if (buf == NULL)
-	{
-		printf("malloc failed buf");
-		return NULL;
-	}
-	int recvLen;
-	int addr_len = sizeof(struct sockaddr_in);
-
-	APP_DEBUG("%s:%d starting ...", p->sipId, rtcp_port);
-
-	memset(buf, 0, 1024);
-	while (p->running)
-	{
-		recvLen = recvfrom(socket_fd, buf, 1024, 0, (struct sockaddr*)&servaddr, (int*)&addr_len);
-		if (recvLen > 0)
-		{
-			printf("stream_keep_alive_thread, rtcp_port %d, recv %d bytes\n", rtcp_port, recvLen);
-			recvLen = sendto(socket_fd, buf, recvLen, 0, (struct sockaddr*)&servaddr, sizeof(struct sockaddr_in));
-			if (recvLen <= 0)
-			{
-				APP_ERR("sendto %d failed", rtcp_port);
-			}
-		}
-		else
-		{
-			perror("recvfrom() alive");
-		}
-		//gettimeofday(&tv, NULL);
-		GetLocalTime(&st);
-	}
-
-	release_udpsocket(socket_fd, NULL);
-	if (buf != NULL)
-	{
-		free(buf);
-	}
-
-	APP_DEBUG("%s:%d run over", p->sipId, rtcp_port);
-
-	return NULL;
 }
 
 //开始接收视频流
@@ -987,33 +612,16 @@ static int startStreamRecv(liveVideoStreamParams *pliveVideoParams)
 	HANDLE hHandle;
 	HANDLE hHandleAlive;
 	//pthread_t pid;
-	CameraParams *p;
+	
 	for (i = 0; i < pliveVideoParams->cameraNum; i++)
 	{
-		p = pliveVideoParams->pCameraParams + i;
+		CameraParams *p = pliveVideoParams->pCameraParams + i;
 		p->statusErrCnt = 0;
 		p->running = 1;
 
-		/*
-		if ((hHandle = (HANDLE)_beginthreadex(NULL, 0, rtp_recv_thread, (void*)p, 0, NULL)) == INVALID_HANDLE_VALUE)
-		{
-			APP_ERR("pthread_create rtp_recv_thread err, %s:%d", p->sipId, p->recvPort);
-		}
-		else
-		{
-			CloseHandle(hHandle);
-		}
-		/*	if ((hHandleAlive = (HANDLE)_beginthreadex(NULL, 0, stream_keep_alive_thread, (void*)p, 0, NULL)) == INVALID_HANDLE_VALUE) {
-		APP_ERR("pthread_create stream_keep_alive_thread err, %s:%d", p->sipId, p->recvPort + 1);
-		}
-		else
-		{
-		CloseHandle(hHandleAlive);
-		}*/
-
 		if ((hHandle = (HANDLE)_beginthreadex(NULL, 0, jrtplib_rtp_recv_thread, (void*)p, 0, NULL)) == INVALID_HANDLE_VALUE)
 		{
-			APP_ERR("pthread_create rtp_recv_thread err, %s:%d", p->sipId, p->recvPort);
+			printf("pthread_create rtp_recv_thread err, %s:%d", p->sipId, p->recvPort);
 		}
 		else
 		{
@@ -1124,11 +732,10 @@ static int sendPlayBye(gb28181Params *p28181Params)
 static int startCameraRealStream(liveVideoStreamParams *pliveVideoParams)
 {
 	int i;
-	CameraParams *p;
 
 	for (i = 0; i < pliveVideoParams->cameraNum; i++)
 	{
-		p = pliveVideoParams->pCameraParams + i;
+		CameraParams *p = pliveVideoParams->pCameraParams + i;
 		sendInvitePlay(p->sipId, p->recvPort, &(pliveVideoParams->gb28181Param));
 	}
 
@@ -1139,12 +746,11 @@ static int startCameraRealStream(liveVideoStreamParams *pliveVideoParams)
 static int stopCameraRealStream(liveVideoStreamParams *pliveVideoParams)
 {
 	int i, tryCnt;
-	CameraParams *p;
 	gb28181Params *p28181Params = &(pliveVideoParams->gb28181Param);
 
 	for (i = 0; i < pliveVideoParams->cameraNum; i++)
 	{
-		p = pliveVideoParams->pCameraParams + i;
+		CameraParams *p = pliveVideoParams->pCameraParams + i;
 		p28181Params->call_id = -1;
 		sendInvitePlay(p->sipId, p->recvPort, p28181Params);
 		tryCnt = 10;
@@ -1158,7 +764,7 @@ static int stopCameraRealStream(liveVideoStreamParams *pliveVideoParams)
 		}
 		if (p28181Params->call_id == -1)
 		{
-			APP_WARRING("exception wait call_id:%d, %s", p28181Params->call_id, p->sipId);
+			printf("exception wait call_id:%d, %s", p28181Params->call_id, p->sipId);
 		}
 		sendPlayBye(p28181Params);
 
@@ -1172,18 +778,17 @@ static int stopCameraRealStream(liveVideoStreamParams *pliveVideoParams)
 static int checkCameraStatus(liveVideoStreamParams *pliveVideoParams)
 {
 	int i;
-	CameraParams *p;
 	gb28181Params *p28181Params = &(pliveVideoParams->gb28181Param);
 
 	for (i = 0; i < pliveVideoParams->cameraNum; i++)
 	{
-		p = pliveVideoParams->pCameraParams + i;
+		CameraParams *p = pliveVideoParams->pCameraParams + i;
 		if (p->status == 0)
 		{
 			p->statusErrCnt++;
 			if (p->statusErrCnt % 10 == 0)
 			{
-				APP_WARRING("camera %s is exception, restart it", p->sipId);
+				printf("camera %s is exception, restart it", p->sipId);
 				p28181Params->call_id = -1;
 				sendInvitePlay(p->sipId, p->recvPort, p28181Params);
 				p->statusErrCnt = 0;
@@ -1204,11 +809,10 @@ static int checkCameraStatus(liveVideoStreamParams *pliveVideoParams)
 static int stopStreamRecv(liveVideoStreamParams *pliveVideoParams)
 {
 	int i;
-	CameraParams *p;
 
 	for (i = 0; i < pliveVideoParams->cameraNum; i++)
 	{
-		p = pliveVideoParams->pCameraParams + i;
+		CameraParams *p = pliveVideoParams->pCameraParams + i;
 		p->running = 0;
 	}
 
@@ -1258,7 +862,7 @@ static int sendQueryCatalog(gb28181Params *p28181Params)
 				eXosip_lock(peCtx);
 				eXosip_message_send_request(peCtx, message);
 				eXosip_unlock(peCtx);
-				APP_DEBUG("xml:%s, dest_call:%s, source_call:%s, ok", buf, dest_call, source_call);
+				printf("xml:%s, dest_call:%s, source_call:%s, ok", buf, dest_call, source_call);
 				fprintf(g_fp, "xml:%s, dest_call:%s, source_call:%s, ok", buf, dest_call, source_call);
 			}
 			else
