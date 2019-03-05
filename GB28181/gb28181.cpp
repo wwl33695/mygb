@@ -79,6 +79,9 @@ typedef struct {
 	FILE *fpH264;
 	int running;
 
+	int call_id;
+	int dialog_id;
+
 	jrtplib::RTPSession sess;
 	std::thread rtpthread;
 } CameraParams;
@@ -193,7 +196,7 @@ int MsgThreadProc(gb28181Params *p28181Params)
 			{
 				p28181Params->call_id = je->cid;
 				p28181Params->dialog_id = je->did;
-				printf("call answered method:%s, call_id:%d, dialog_id:%d\n", je->request->sip_method, p28181Params->call_id, p28181Params->dialog_id);
+				printf("call answered method:%s, call_id:%d, dialog_id:%d\n", je->request->sip_method, je->cid, je->did);
 				osip_message_t *ack = NULL;
 				eXosip_call_build_ack(peCtx, je->did, &ack);
 				eXosip_lock(peCtx);
@@ -513,14 +516,13 @@ int mysip_uninit(struct eXosip_t *eCtx)
 int sendInvitePlay(gb28181Params *p28181Params, CameraParams *p, int rtp_recv_port)
 {
 	char dest_call[256], source_call[256], subject[128];
-	osip_message_t *invite = NULL;
-	int ret;
-	struct eXosip_t *peCtx = p28181Params->eCtx;
-
 	_snprintf(dest_call, 256, "sip:%s@%s:%d", p->sipId, p->deviceip, p->deviceport);
 	_snprintf(source_call, 256, "sip:%s@%s", p28181Params->localSipId, p28181Params->localIpAddr);
 	_snprintf(subject, 128, "%s:0,%s:0", p->sipId, p28181Params->localSipId);
-	ret = eXosip_call_build_initial_invite(peCtx, &invite, dest_call, source_call, NULL, subject);
+
+	osip_message_t *invite = NULL;
+	struct eXosip_t *peCtx = p28181Params->eCtx;
+	int ret = eXosip_call_build_initial_invite(peCtx, &invite, dest_call, source_call, NULL, subject);
 	if (ret != 0)
 	{
 		printf("eXosip_call_build_initial_invite failed, %s,%s,%s", dest_call, source_call, subject);
@@ -552,41 +554,13 @@ int sendInvitePlay(gb28181Params *p28181Params, CameraParams *p, int rtp_recv_po
 }
 
 //停止视频回传
-int sendPlayBye(gb28181Params *p28181Params)
+int sendPlayBye(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
 {
-	struct eXosip_t *peCtx = p28181Params->eCtx;
+	struct eXosip_t *peCtx = pliveVideoParams->gb28181Param.eCtx;
 
 	eXosip_lock(peCtx);
-	eXosip_call_terminate(peCtx, p28181Params->call_id, p28181Params->dialog_id);
+	eXosip_call_terminate(peCtx, p->call_id, p->dialog_id);
 	eXosip_unlock(peCtx);
-	return 0;
-}
-
-//停止摄像机视频回传
-int stopCameraRealStream(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
-{
-	int i, tryCnt;
-	gb28181Params *p28181Params = &(pliveVideoParams->gb28181Param);
-
-	p28181Params->call_id = -1;
-//	sendInvitePlay(p->sipId, p->recvPort, p28181Params);
-	tryCnt = 10;
-	while (tryCnt-- > 0)
-	{
-		if (p28181Params->call_id != -1)
-		{
-			break;
-		}
-		Sleep(1000);
-	}
-	if (p28181Params->call_id == -1)
-	{
-		printf("exception wait call_id:%d, %s", p28181Params->call_id, p->sipId);
-	}
-	sendPlayBye(p28181Params);
-
-	p->running = 0;
-
 	return 0;
 }
 
@@ -605,7 +579,6 @@ static int checkCameraStatus(liveVideoStreamParams *pliveVideoParams, CameraPara
 			p28181Params->call_id = -1;
 //			sendInvitePlay(p->sipId, p->recvPort, p28181Params);
 			p->statusErrCnt = 0;
-
 		}
 	}
 	else
