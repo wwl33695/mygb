@@ -10,6 +10,31 @@
 	#include <arpa/inet.h>
 #else
 	#include <winsock2.h>
+
+	#pragma comment(lib, "ws2_32.lib")
+	#pragma comment(lib, "mxml1.lib")
+	#pragma comment(lib, "eXosip.lib")
+	#pragma comment(lib, "libcares.lib")
+	#pragma comment(lib, "osip2.lib")
+
+	//Dnsapi.lib;Iphlpapi.lib;ws2_32.lib;eXosip.lib;osip2.lib;osipparser2.lib;Qwave.lib;libcares.lib;delayimp.lib;
+	//忽略 libcmt.lib默认库
+	#pragma comment(lib, "Dnsapi.lib")
+	#pragma comment(lib, "Iphlpapi.lib")
+	#pragma comment(lib, "osipparser2.lib")
+	#pragma comment(lib, "Qwave.lib")
+	#pragma comment(lib, "delayimp.lib")
+
+	#ifdef DEBUG
+	#pragma comment(lib, "jrtplib_d.lib") 
+	#pragma comment(lib,"jthread_d.lib")
+	#pragma comment(lib,"WS2_32.lib")
+	#else
+	#pragma comment(lib, "jrtplib.lib") 
+	#pragma comment(lib,"jthread.lib")
+	#pragma comment(lib,"WS2_32.lib")
+	#endif
+
 #endif // WIN32
 
 #include <map>
@@ -23,34 +48,7 @@
 #include <process.h>
 #include <eXosip2/eXosip.h>
 
-#pragma comment(lib, "ws2_32.lib")
-#pragma comment(lib, "mxml1.lib")
-#pragma comment(lib, "eXosip.lib")
-#pragma comment(lib, "libcares.lib")
-#pragma comment(lib, "osip2.lib")
-
-//Dnsapi.lib;Iphlpapi.lib;ws2_32.lib;eXosip.lib;osip2.lib;osipparser2.lib;Qwave.lib;libcares.lib;delayimp.lib;
-//忽略 libcmt.lib默认库
-#pragma comment(lib, "Dnsapi.lib")
-#pragma comment(lib, "Iphlpapi.lib")
-#pragma comment(lib, "osipparser2.lib")
-#pragma comment(lib, "Qwave.lib")
-#pragma comment(lib, "delayimp.lib")
-
-#ifdef DEBUG
-#pragma comment(lib, "jrtplib_d.lib") 
-#pragma comment(lib,"jthread_d.lib")
-#pragma comment(lib,"WS2_32.lib")
-#else
-#pragma comment(lib, "jrtplib.lib") 
-#pragma comment(lib,"jthread.lib")
-#pragma comment(lib,"WS2_32.lib")
-#endif
-
-#define CAMERA_SUPPORT_MAX      500
-#define RTP_MAXBUF          4096
 #define PS_BUF_SIZE         (1024*1024*4)
-#define H264_FRAME_SIZE_MAX (1024*1024*2)
 
 typedef struct _gb28181Params{
 	char platformSipId[MAX_PATH];
@@ -120,47 +118,6 @@ void RegisterFailed(struct eXosip_t * peCtx, eXosip_event_t *je)
 		eXosip_message_send_answer(peCtx, je->tid, 401, pSRegister);
 		eXosip_unlock(peCtx);
 	}
-}
-
-
-//从ini文件读取相关配置信息
-static int ParserIniFile()
-{
-	std::string strIniPath = "./GB28181.ini";
-	::GetPrivateProfileString("GB28181", "platform_id", "你好", g_liveVideoParams.gb28181Param.platformSipId, MAX_PATH, strIniPath.c_str());	//获取平台ID
-	g_liveVideoParams.gb28181Param.platformSipPort = GetPrivateProfileInt("GB28181", "platform_port", 0, strIniPath.c_str());					//获取平台端口
-	::GetPrivateProfileString("GB28181", "platform_ip", "你好", g_liveVideoParams.gb28181Param.platformIpAddr, MAX_PATH, strIniPath.c_str());	//获取平台IP
-	::GetPrivateProfileString("GB28181", "local_id", "你好", g_liveVideoParams.gb28181Param.localSipId, MAX_PATH, strIniPath.c_str());		//获取本地ID
-	g_liveVideoParams.gb28181Param.localSipPort = GetPrivateProfileInt("GB28181", "local_port", 0, strIniPath.c_str());						//获取本地端口
-	::GetPrivateProfileString("GB28181", "local_ip", "你好", g_liveVideoParams.gb28181Param.localIpAddr, MAX_PATH, strIniPath.c_str());		//获取平台IP
-	/*
-	if (g_liveVideoParams.cameraNum > 0 && g_liveVideoParams.cameraNum < CAMERA_SUPPORT_MAX) {
-		g_liveVideoParams.pCameraParams = (CameraParams *)malloc(sizeof(CameraParams)*g_liveVideoParams.cameraNum);
-		if (g_liveVideoParams.pCameraParams == NULL) {
-			printf("malloc, failed");
-			return -1;
-		}
-		memset(g_liveVideoParams.pCameraParams, 0, sizeof(CameraParams)*g_liveVideoParams.cameraNum);
-		CameraParams *p;
-
-		p = g_liveVideoParams.pCameraParams;
-
-		GetPrivateProfileString("GB28181", "camera1_sip_id", "", p->sipId, MAX_PATH, strIniPath.c_str());
-		p->recvPort = GetPrivateProfileInt("GB28181", "camera1_recv_port", 0, strIniPath.c_str());
-
-		//获取相机登录名和密码
-		GetPrivateProfileString("GB28181", "UserPwd", "", p->UserPwd, MAX_PATH, strIniPath.c_str());
-		GetPrivateProfileString("GB28181", "UserName", "", p->UserName, MAX_PATH, strIniPath.c_str());
-	}
-	*/
-	g_liveVideoParams.gb28181Param.SN = 1;
-	g_liveVideoParams.gb28181Param.call_id = -1;
-	g_liveVideoParams.gb28181Param.dialog_id = -1;
-	g_liveVideoParams.gb28181Param.registerOk = 0;
-
-	printf("加载配置文件完成");
-
-	return 0;
 }
 
 //与相机进行消息交换的主线程
@@ -234,10 +191,10 @@ int MsgThreadProc(gb28181Params *p28181Params)
 			}
 			case EXOSIP_CALL_ANSWERED:
 			{
-				osip_message_t *ack = NULL;
 				p28181Params->call_id = je->cid;
 				p28181Params->dialog_id = je->did;
 				printf("call answered method:%s, call_id:%d, dialog_id:%d\n", je->request->sip_method, p28181Params->call_id, p28181Params->dialog_id);
+				osip_message_t *ack = NULL;
 				eXosip_call_build_ack(peCtx, je->did, &ack);
 				eXosip_lock(peCtx);
 				eXosip_call_send_ack(peCtx, je->did, ack);
@@ -595,7 +552,7 @@ int sendInvitePlay(gb28181Params *p28181Params, CameraParams *p, int rtp_recv_po
 }
 
 //停止视频回传
-static int sendPlayBye(gb28181Params *p28181Params)
+int sendPlayBye(gb28181Params *p28181Params)
 {
 	struct eXosip_t *peCtx = p28181Params->eCtx;
 
@@ -605,16 +562,8 @@ static int sendPlayBye(gb28181Params *p28181Params)
 	return 0;
 }
 
-//请求摄像机回传视频
-static int startCameraRealStream(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
-{
-//	sendInvitePlay(p->sipId, p->recvPort, &(pliveVideoParams->gb28181Param));
-
-	return 0;
-}
-
 //停止摄像机视频回传
-static int stopCameraRealStream(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
+int stopCameraRealStream(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
 {
 	int i, tryCnt;
 	gb28181Params *p28181Params = &(pliveVideoParams->gb28181Param);
