@@ -35,15 +35,6 @@
 
 #define PS_BUF_SIZE         (1024*1024*4)
 
-int myh264framecallback(char* data, int length, void* usrdata)
-{
-	CameraParams *p = (CameraParams *)usrdata;
-
-	fwrite(data, 1, length, p->fpH264);
-
-	return 0;
-}
-
 int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPayloadLength, CameraParams *p)
 {
 	static uint32_t cnt = 0;
@@ -75,6 +66,15 @@ int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPa
 		}
 
 		p->parser.Parse(psBuf, psLen);
+	
+		char *packet = NULL;
+		uint32_t packetsize = 0;
+		if( p->parser.getpacket(&packet, &packetsize) >= 0 )
+		{
+			p->decoder.SetPacketData((uint8_t*)packet, packetsize);
+			if( p->fpH264 )
+				fwrite(packet, 1, packetsize, p->fpH264);
+		}
 
 		memcpy(psBuf, ptr, rtpPayloadLength);
 		psLen = 0;
@@ -114,7 +114,6 @@ int jrtplib_rtp_recv_thread(void* arg)
 {
 	//获取相机参数
 	CameraParams *p = (CameraParams *)arg;
-	p->parser.setcallback(myh264framecallback, arg);
 
 	char *psBuf = (char *)malloc(PS_BUF_SIZE);
 	if (psBuf == NULL)
@@ -135,18 +134,21 @@ int jrtplib_rtp_recv_thread(void* arg)
 	//获取当前程序路径
 	char filename[MAX_PATH];
 	std::string strPath = p->sipId;
-	snprintf(filename, MAX_PATH, "%s1234.264", strPath.c_str());
-	p->fpH264 = fopen(filename, "wb");
+	snprintf(filename, MAX_PATH, "%s.264", strPath.c_str());
+	if( p->writefile )
+		p->fpH264 = fopen(filename, "wb");
+
 	if (p->fpH264 == NULL)
 	{
 		printf("fopen %s failed", filename);
-		return NULL;
 	}
 
 	uint32_t last_ts = 0;
 	//开始接收流包
 	while (p->running)
 	{
+		p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000));
+
 		p->sess.BeginDataAccess();
 
 		// check incoming packets
@@ -155,7 +157,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 			do{
 				jrtplib::RTPPacket *pack;
 
-				while ((pack = p->sess.GetNextPacket()) != NULL)
+				if ((pack = p->sess.GetNextPacket()) != NULL)
 				{
 					// You can examine the data here
 					printf("Got packet! %d \n", pack->GetPayloadLength());
@@ -185,6 +187,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 		}
 #endif // RTP_SUPPORT_THREAD
 
+//		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 //		jrtplib::RTPTime::Wait(jrtplib::RTPTime(0, 1));
 	}
 
@@ -194,8 +197,13 @@ int jrtplib_rtp_recv_thread(void* arg)
 	WSACleanup();
 #endif // WIN32
 
-	fclose(p->fpH264);
-	p->fpH264 = NULL;
+	p->decoder.Stop();
+
+	if( p->fpH264 )
+	{
+		fclose(p->fpH264);
+		p->fpH264 = NULL;
+	}
 
 	return 0;
 }
@@ -240,6 +248,12 @@ int gb28181_startstream(void *handle, char* deviceip)
 		return -1;
 	}
 
+	if( !param->decoder.GetCodec(27, 1) )
+	{
+		printf("GetCodec error");
+		return -1;		
+	}
+
 	if (getrtpsession(param->sess, param->recvPort) < 0)
 	{
 		printf("getrtpsession error");
@@ -249,6 +263,7 @@ int gb28181_startstream(void *handle, char* deviceip)
 	param->running = 1;
 	param->status = 0;
 	param->statusErrCnt = 0;
+	param->writefile = 0;//1;
 
 	sendInvitePlay(&inst->gb28181Param, param, param->recvPort);
 
@@ -291,6 +306,56 @@ int gb28181_getregisterstatus(void *handle, char* deviceip)
 	{
 		printf("getdeviceinfo error");
 		return -1;
+	}
+
+	return 0;
+}
+
+int gb28181_getinfo(void *handle, char* deviceip, int *width, int *height)
+{
+	if (!handle || !deviceip)
+		return -1;
+
+	liveVideoStreamParams *inst = (liveVideoStreamParams *)handle;
+	CameraParams *param = NULL;
+	if (getdeviceinfo(inst, deviceip, &param) < 0)
+	{
+		printf("getdeviceinfo error");
+		return -1;
+	}
+
+	if( !param->decoder.GetInfo(width, height) )
+	{
+		printf("GetRGBData error");
+		return -1;		
+	}
+
+	return 0;
+}
+
+int gb28181_getrgbdata(void *handle, char* deviceip, uint8_t *data, int width, int height)
+{
+	if (!handle || !deviceip)
+		return -1;
+
+	liveVideoStreamParams *inst = (liveVideoStreamParams *)handle;
+	CameraParams *param = NULL;
+	if (getdeviceinfo(inst, deviceip, &param) < 0)
+	{
+		printf("getdeviceinfo error");
+		return -1;
+	}
+
+	if( !param->decoder.GetRGBData(data, width, height) )
+	{
+		printf("GetRGBData error");
+		return -1;		
+	}
+
+	if( !param->decoder.GetRGBData(data, width, height) )
+	{
+		printf("GetRGBData error");
+		return -1;		
 	}
 
 	return 0;

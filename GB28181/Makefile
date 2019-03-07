@@ -3,11 +3,12 @@ CPP = g++
 
 ########################################
 CFLAGS = -fPIC -lpthread
-CPPFLAGS = -fPIC -g -w -std=c++11 -I/opt/dilulib/x86_64/libosip2-5.0.0/include -I/opt/dilulib/x86_64/jrtplib-3.11.1/include
+CPPFLAGS = -fPIC -g -w -std=c++11 -I/opt/dilulib/x86_64/libosip2-5.0.0/include -I/opt/dilulib/x86_64/jrtplib-3.11.1/include \
+ -I/opt/dilulib/x86_64/ffmpeg-3.4.5/include/
 
 LINK_FLAGS = -w -g -D__STDC_CONSTANT_MACROS
 LIBS =  -lstdc++ -lpthread -L/opt/dilulib/x86_64/libosip2-5.0.0/lib -losip2 /opt/dilulib/x86_64/libosip2-5.0.0/lib/libosipparser2.a \
- -leXosip2 /opt/dilulib/x86_64/jrtplib-3.11.1/lib/libjrtp.a 
+ -leXosip2 /opt/dilulib/x86_64/jrtplib-3.11.1/lib/libjrtp.a -L/opt/dilulib/x86_64/ffmpeg-3.4.5/lib -lavcodec -lavformat -lavutil -lswscale
 #########################################################
 
 PROGRAM = gb28181

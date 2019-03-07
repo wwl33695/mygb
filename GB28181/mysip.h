@@ -27,6 +27,7 @@
 #include "rtpsourcedata.h"
 
 #include "psparser.h"
+#include "ffdecoder.h"
 
 #ifndef MAX_PATH
 	#define MAX_PATH 128
@@ -61,10 +62,12 @@ typedef struct {
 	int call_id;
 	int dialog_id;
 	int registerOk;
+	int writefile;
 
 	jrtplib::RTPSession sess;
 	std::thread rtpthread;
 	PsPacketParser parser;
+	FFDecoder decoder;
 } CameraParams;
 
 typedef struct _liveVideoStreamParams{

@@ -11,6 +11,10 @@ int gb28181_stopstream(void *handle, char* deviceip);
 
 int gb28181_getregisterstatus(void *handle, char* deviceip);
 
+int gb28181_getinfo(void *handle, char* deviceip, int *width, int *height);
+
+int gb28181_getrgbdata(void *handle, char* deviceip, uint8_t *data, int width, int height);
+
 int gb28181_uninit(void *handle);
 
 #endif

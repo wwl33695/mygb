@@ -1,11 +1,39 @@
 #include <thread>
 #include <string>
 
-#include "gb28181.h"
+//#include "gb28181.h"
+#include "gbcamera.h"
+
+uint8_t buffer[1024 * 1024 * 8] = {0};
 
 int main(int argc, char *argv[])
 {
 
+	GBCamera camera;
+	camera.init("10.0.1.222", 5060, "34020000002000000001");
+
+	std::string deviceip = "10.0.1.242";
+	int width = 1080;
+	int height = 720;
+	int i = 0;
+	while (1)
+	{
+		if(  camera.getframe((char*)deviceip.c_str(), buffer, width, height) >= 0 )
+		{
+			char filename[128] = {0};
+			sprintf(filename, "%d_1234.rgb", i);
+			FILE* file = fopen(filename, "wb");
+			fwrite(buffer, 1, width*height*3, file);
+			fclose(file);
+
+			i++;
+		}
+
+		//		checkCameraStatus(&g_liveVideoParams);
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
+/*
 	void *handle = gb28181_init("10.0.1.222", 5060, "34020000002000000001");
 
 	std::string deviceip = "10.0.1.242";
@@ -21,13 +49,27 @@ int main(int argc, char *argv[])
 
 	gb28181_startstream(handle, (char*)deviceip.c_str());
 
+	int width = 1080;
+	int height = 720;
 	int i = 0;
 	while (1)
 	{
+		if(  gb28181_getrgbdata(handle, (char*)deviceip.c_str(), buffer, width, height) >= 0 )
+		{
+			char filename[128] = {0};
+			sprintf(filename, "%d_1234.rgb", i);
+			FILE* file = fopen(filename, "wb");
+			fwrite(buffer, 1, width*height*3, file);
+			fclose(file);
+
+			i++;
+		}
+
 		//		checkCameraStatus(&g_liveVideoParams);
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-		if (i == 20)
-			break;
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+//		if (i == 20)
+//			break;
 //		i++;
 	}
 
@@ -40,6 +82,6 @@ int main(int argc, char *argv[])
 		//		if (i == 20)
 		//			break;
 	}
-
+*/
 	return 0;
 }

@@ -57,6 +57,7 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, char*
 		strcpy(param.deviceip, deviceip);
 		strcpy(param.deviceport, deviceport);
 		param.registerOk = 1;
+		param.fpH264 = NULL;
 	}
 
 	pliveVideoParams->cameraParamMutex.unlock();
