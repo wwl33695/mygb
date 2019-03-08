@@ -13,8 +13,6 @@ class GBCamera
 public:
 	int init(char* localip, int localport, char *localsipid);
 
-	int getframe(uint8_t *data, int width, int height);
-
 	cv::Mat getframe();
 
 	void setdeviceip(char* deviceip);

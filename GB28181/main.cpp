@@ -13,18 +13,19 @@ int main(int argc, char *argv[])
 	camera.init("10.0.1.222", 5060, "34020000002000000001");
 
 	std::string deviceip = "10.0.1.242";
+	camera.setdeviceip((char*)deviceip.c_str());
+
 	int width = 1080;
 	int height = 720;
 	int i = 0;
 	while (1)
 	{
-		if(  camera.getframe((char*)deviceip.c_str(), buffer, width, height) >= 0 )
+		cv::Mat mat = camera.getframe();
+		if( !mat.empty() )
 		{
 			char filename[128] = {0};
-			sprintf(filename, "%d_1234.rgb", i);
-			FILE* file = fopen(filename, "wb");
-			fwrite(buffer, 1, width*height*3, file);
-			fclose(file);
+			sprintf(filename, "%d_1234.jpg", i);
+			cv::imwrite(filename, mat);
 
 			i++;
 		}
