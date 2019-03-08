@@ -161,7 +161,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 				if ((pack = p->sess.GetNextPacket()) != NULL)
 				{
 					// You can examine the data here
-					printf("Got packet! %d \n", pack->GetPayloadLength());
+//					printf("Got packet! %d \n", pack->GetPayloadLength());
 
 					//std::cout << pack->GetPayloadData() << std::endl;
 					uint32_t ts = pack->GetTimestamp();
@@ -249,7 +249,7 @@ int gb28181_startstream(void *handle, char* deviceip)
 		return -1;
 	}
 
-	if( !param->decoder.GetCodec(27, 1) )
+	if( !param->decoder.GetCodec(27, 0) )
 	{
 		printf("GetCodec error \n");
 		return -1;		
