@@ -105,6 +105,7 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 			rtpport = i;
 			return 0;
 		}
+		printf("getrtpsession error: %d, %s \n", status, jrtplib::RTPGetErrorString(status).c_str() );
 		sess.Destroy();
 	}
 	return -1;
@@ -119,7 +120,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 	if (psBuf == NULL)
 	{
 		//APP_ERR("malloc failed");
-		printf("malloc failed");
+		printf("malloc failed \n");
 		return -1;
 	}
 	memset(psBuf, 0, PS_BUF_SIZE);
@@ -140,7 +141,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 
 	if (p->fpH264 == NULL)
 	{
-		printf("fopen %s failed", filename);
+		printf("fopen %s failed \n", filename);
 	}
 
 	uint32_t last_ts = 0;
@@ -244,19 +245,19 @@ int gb28181_startstream(void *handle, char* deviceip)
 	CameraParams *param = NULL;
 	if (getdeviceinfo(inst, deviceip, &param) < 0)
 	{
-		printf("getdeviceinfo error");
+		printf("getdeviceinfo error \n");
 		return -1;
 	}
 
 	if( !param->decoder.GetCodec(27, 1) )
 	{
-		printf("GetCodec error");
+		printf("GetCodec error \n");
 		return -1;		
 	}
 
 	if (getrtpsession(param->sess, param->recvPort) < 0)
 	{
-		printf("getrtpsession error");
+		printf("getrtpsession error \n");
 		return -1;
 	}
 
@@ -282,7 +283,7 @@ int gb28181_stopstream(void *handle, char* deviceip)
 	CameraParams *param = NULL;
 	if (getdeviceinfo(inst, deviceip, &param) < 0)
 	{
-		printf("getdeviceinfo error");
+		printf("getdeviceinfo error \n");
 		return -1;
 	}
 
@@ -304,7 +305,7 @@ int gb28181_getregisterstatus(void *handle, char* deviceip)
 	CameraParams *param = NULL;
 	if (getdeviceinfo(inst, deviceip, &param) < 0)
 	{
-		printf("getdeviceinfo error");
+		printf("getdeviceinfo error \n");
 		return -1;
 	}
 
@@ -320,13 +321,13 @@ int gb28181_getinfo(void *handle, char* deviceip, int *width, int *height)
 	CameraParams *param = NULL;
 	if (getdeviceinfo(inst, deviceip, &param) < 0)
 	{
-		printf("getdeviceinfo error");
+		printf("getdeviceinfo error \n");
 		return -1;
 	}
 
 	if( !param->decoder.GetInfo(width, height) )
 	{
-		printf("GetRGBData error");
+		printf("GetRGBData error \n");
 		return -1;		
 	}
 
@@ -342,19 +343,19 @@ int gb28181_getrgbdata(void *handle, char* deviceip, uint8_t *data, int width, i
 	CameraParams *param = NULL;
 	if (getdeviceinfo(inst, deviceip, &param) < 0)
 	{
-		printf("getdeviceinfo error");
+		printf("getdeviceinfo error \n");
 		return -1;
 	}
 
 	if( !param->decoder.GetRGBData(data, width, height) )
 	{
-		printf("GetRGBData error");
+		printf("GetRGBData error \n");
 		return -1;		
 	}
 
 	if( !param->decoder.GetRGBData(data, width, height) )
 	{
-		printf("GetRGBData error");
+		printf("GetRGBData error \n");
 		return -1;		
 	}
 
