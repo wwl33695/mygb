@@ -71,9 +71,10 @@ int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPa
 		uint32_t packetsize = 0;
 		if( p->parser.getpacket(&packet, &packetsize) >= 0 )
 		{
-			p->decoder.SetPacketData((uint8_t*)packet, packetsize);
 			if( p->fpH264 )
 				fwrite(packet, 1, packetsize, p->fpH264);
+			else
+				p->decoder.SetPacketData((uint8_t*)packet, packetsize);
 		}
 
 		memcpy(psBuf, ptr, rtpPayloadLength);
@@ -345,12 +346,6 @@ int gb28181_getrgbdata(void *handle, char* deviceip, uint8_t *data, int width, i
 	{
 		printf("getdeviceinfo error \n");
 		return -1;
-	}
-
-	if( !param->decoder.GetRGBData(data, width, height) )
-	{
-		printf("GetRGBData error \n");
-		return -1;		
 	}
 
 	if( !param->decoder.GetRGBData(data, width, height) )
