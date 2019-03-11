@@ -147,13 +147,19 @@ int jrtplib_rtp_recv_thread(void* arg)
 
 	uint32_t last_ts = 0;
 	//开始接收流包
+	p->sess.BeginDataAccess();
 	while (p->running)
 	{
-		p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000));
+//		p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000));
 
-		p->sess.BeginDataAccess();
+#ifndef RTP_SUPPORT_THREAD
+		if( p->sess.Poll() < 0 )
+		{
+			printf("sess.Poll() error \n");
+			break;
+		}
+#endif // RTP_SUPPORT_THREAD
 
-		// check incoming packets
 		if (p->sess.GotoFirstSourceWithData())
 		{
 			do{
@@ -161,10 +167,8 @@ int jrtplib_rtp_recv_thread(void* arg)
 
 				if ((pack = p->sess.GetNextPacket()) != NULL)
 				{
-					// You can examine the data here
 //					printf("Got packet! %d \n", pack->GetPayloadLength());
 
-					//std::cout << pack->GetPayloadData() << std::endl;
 					uint32_t ts = pack->GetTimestamp();
 					if (ts >= last_ts || abs(int(ts - last_ts))/90000 >= 3600 )
 					{
@@ -179,20 +183,11 @@ int jrtplib_rtp_recv_thread(void* arg)
 			} while (p->sess.GotoNextSourceWithData());
 		}
 
-		p->sess.EndDataAccess();
-
-#ifndef RTP_SUPPORT_THREAD
-		if( p->sess.Poll() < 0 )
-		{
-			printf("sess.Poll() error \n");
-			break;
-		}
-#endif // RTP_SUPPORT_THREAD
-
 //		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 //		jrtplib::RTPTime::Wait(jrtplib::RTPTime(0, 1));
 	}
 
+	p->sess.EndDataAccess();
 	p->sess.BYEDestroy(jrtplib::RTPTime(0, 1000), 0, 0);
 
 #ifdef WIN32
