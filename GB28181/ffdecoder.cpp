@@ -120,13 +120,14 @@ bool FFDecoder::SetPacketData(uint8_t *data, int length)
 bool FFDecoder::GetRGBData(uint8_t *data, int width, int height)
 {
     AVFrame *frame = NULL;
-    while (frame == NULL) {
-        std::lock_guard<std::mutex> lock(m_mtx);
+//    while (frame == NULL) 
+    {
+        std::lock_guard<std::mutex> lock(m_mtx_frames);
         if (!m_frames.empty()) {
             printf("FFDecoder::GetRGBData:framesize = %d \n", m_frames.size());
             frame = m_frames.front();
             m_frames.pop_front();
-            break;
+//            break;
         }
     }
 
@@ -282,11 +283,11 @@ void FFDecoder::DecodeThread(FFDecoder *that)
             break;
         }
 
-        while (avcodec_receive_frame(that->m_avctx, frame) == 0) {
+        if (avcodec_receive_frame(that->m_avctx, frame) == 0) {
             printf("frame pts:%ld format:%d\n", frame->pts, frame->format);
 
             {
-                std::lock_guard<std::mutex> lock(that->m_mtx);
+                std::lock_guard<std::mutex> lock(that->m_mtx_frames);
                 that->m_width = frame->width;
                 that->m_height = frame->height;
                 that->m_frames.push_back(frame);
@@ -304,6 +305,7 @@ void FFDecoder::DecodeThread(FFDecoder *that)
             if (!that->m_pkts.empty()) {
                 pkt = that->m_pkts.front();
                 that->m_pkts.pop_front();
+                printf("FFDecoder::DecodeThread:packetsize = %d \n", that->m_pkts.size());
             }
         }
 
@@ -313,7 +315,9 @@ void FFDecoder::DecodeThread(FFDecoder *that)
             delete pkt;
             pkt = NULL;
         } else {
-            usleep(10 * 1000);
+//            usleep(10 * 1000);
         }
+
+        usleep(1000 * 1000);
     }
 }

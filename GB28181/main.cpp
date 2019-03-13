@@ -8,12 +8,17 @@ uint8_t buffer[1024 * 1024 * 8] = {0};
 
 int main(int argc, char *argv[])
 {
+	if( argc < 4 )
+		return -1;
+
+	char *localip = argv[1];
+	int localport = atoi(argv[2]);
+	char *cameraip = argv[3];
 
 	GBCamera camera;
-	camera.init("10.0.1.222", 5060, "34020000002000000001");
+	camera.init(localip, localport, "34020000002000000001");
 
-	std::string deviceip = "10.0.1.242";
-	camera.setdeviceip((char*)deviceip.c_str());
+	camera.setdeviceip(cameraip);
 
 	int width = 1080;
 	int height = 720;
@@ -31,7 +36,7 @@ int main(int argc, char *argv[])
 		}
 
 		//		checkCameraStatus(&g_liveVideoParams);
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
 /*

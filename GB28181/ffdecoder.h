@@ -41,6 +41,7 @@ private:
 
     std::mutex m_mtx;
     std::list<AVPacket*> m_pkts;
+    std::mutex m_mtx_frames;
     std::list<AVFrame*> m_frames;
 
     bool m_stop;
