@@ -34,26 +34,29 @@ cv::Mat GBCamera::getframe()
 		playrequested = 1;		
 	}
 
-    cv::Mat mat;
-	int width, height;
 	while (1)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
+		int width = -1, height = -1;
 		gb28181_getinfo(inst, (char*)m_deviceip.c_str(), &width, &height);
 		if( width < 0 || height < 0 )
 		{
 			continue;
 		}
 
-	    mat.create(height, width, CV_8UC3);
-		if(  gb28181_getrgbdata(inst, (char*)m_deviceip.c_str(), (uint8_t*)mat.ptr(), width, height) >= 0 )
-		{
-			break;
+		{		
+	    	cv::Mat mat;
+		    mat.create(height, width, CV_8UC3);
+			if(  gb28181_getrgbdata(inst, (char*)m_deviceip.c_str(), (uint8_t*)mat.ptr(), width, height) >= 0 )
+			{
+				return mat;
+				//break;
+			}
 		}
 
 		//		checkCameraStatus(&g_liveVideoParams);
 	}
 
-	return mat;
+//	return mat;
 }

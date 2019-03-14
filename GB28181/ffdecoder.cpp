@@ -104,7 +104,12 @@ bool FFDecoder::SetPacketData(uint8_t *data, int length)
     if( !data || length <= 0 )
         return false;
 
-
+    AVPacket *pkt = av_packet_alloc();
+    av_new_packet(pkt, length);
+    memcpy(pkt->data, data, length);
+    std::lock_guard<std::mutex> lock(m_mtx);
+    this->m_pkts.push_back(pkt);
+/*
     AVPacket *pkt = new AVPacket;
     memset(pkt, 0, sizeof(AVPacket));
     uint8_t *buffer = new uint8_t[length];
@@ -114,7 +119,7 @@ bool FFDecoder::SetPacketData(uint8_t *data, int length)
     pkt->size = length;//这个填入H264数据帧的大小  
     std::lock_guard<std::mutex> lock(m_mtx);
     this->m_pkts.push_back(pkt);
-
+*/
     return true;
 }
 
@@ -317,9 +322,11 @@ void FFDecoder::DecodeThread(FFDecoder *that)
         }
         if ( pkt && pkt->data )
         {        
-//            av_packet_unref(pkt);
+            av_packet_free(&pkt);
+/*
             delete []pkt->data;
             delete pkt;
+*/
         }
 
         usleep(10 * 1000);
