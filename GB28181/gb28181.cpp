@@ -114,6 +114,8 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 
 int jrtplib_rtp_recv_thread(void* arg)
 {
+    pthread_setname_np(pthread_self(), "recv_thread");
+
 	//获取相机参数
 	CameraParams *p = (CameraParams *)arg;
 

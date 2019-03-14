@@ -8,6 +8,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 //#include <libavfilter/avfilter.h>
 #include <libavutil/avutil.h>
+#include <libavutil/error.h>
 #include <libswscale/swscale.h>
 //#include <libavutil/pixdesc.h>
 }
@@ -103,6 +104,7 @@ bool FFDecoder::SetPacketData(uint8_t *data, int length)
     if( !data || length <= 0 )
         return false;
 
+
     AVPacket *pkt = new AVPacket;
     memset(pkt, 0, sizeof(AVPacket));
     uint8_t *buffer = new uint8_t[length];
@@ -110,7 +112,6 @@ bool FFDecoder::SetPacketData(uint8_t *data, int length)
 
     pkt->data = buffer;//这里填入一个指向完整H264数据帧的指针  
     pkt->size = length;//这个填入H264数据帧的大小  
-
     std::lock_guard<std::mutex> lock(m_mtx);
     this->m_pkts.push_back(pkt);
 
@@ -272,20 +273,36 @@ void FFDecoder::ReadThread(FFDecoder *that)
 
 void FFDecoder::DecodeThread(FFDecoder *that)
 {
+    pthread_setname_np(pthread_self(), "video_decode");
     AVFrame *frame = av_frame_alloc();
-    while (!that->m_stop) {
-        if (frame == NULL) {
-            frame = av_frame_alloc();
+    while (!that->m_stop) 
+    {
+        AVPacket *pkt = NULL;
+        {
+            std::lock_guard<std::mutex> lock(that->m_mtx);
+            if (!that->m_pkts.empty()) 
+            {
+                pkt = that->m_pkts.front();
+                that->m_pkts.pop_front();
+                printf("FFDecoder::DecodeThread:packetsize = %d \n", that->m_pkts.size());
+            }
         }
 
-        if (frame == NULL) {
-            printf("av_frame_alloc error, exit thread!!!");
-            break;
+        if( !pkt )
+        {
+            usleep(40 * 1000);
+            continue;
         }
 
-        if (avcodec_receive_frame(that->m_avctx, frame) == 0) {
-            printf("frame pts:%ld format:%d\n", frame->pts, frame->format);
-
+        int got_frame = 0;
+        int ret = avcodec_decode_video2(that->m_avctx, frame, &got_frame, pkt);
+        if (ret < 0) 
+        {
+            fprintf(stderr, "Error decoding video frame \n");
+//            break;
+        }
+        else if( got_frame )
+        {
             {
                 std::lock_guard<std::mutex> lock(that->m_mtx_frames);
                 that->m_width = frame->width;
@@ -298,26 +315,13 @@ void FFDecoder::DecodeThread(FFDecoder *that)
                 break;
             }
         }
-
-        AVPacket *pkt = NULL;
-        {
-            std::lock_guard<std::mutex> lock(that->m_mtx);
-            if (!that->m_pkts.empty()) {
-                pkt = that->m_pkts.front();
-                that->m_pkts.pop_front();
-                printf("FFDecoder::DecodeThread:packetsize = %d \n", that->m_pkts.size());
-            }
-        }
-
-        if (pkt) {
-            avcodec_send_packet(that->m_avctx, pkt);
-            av_packet_unref(pkt);
+        if ( pkt && pkt->data )
+        {        
+//            av_packet_unref(pkt);
+            delete []pkt->data;
             delete pkt;
-            pkt = NULL;
-        } else {
-//            usleep(10 * 1000);
         }
 
-        usleep(1000 * 1000);
+        usleep(10 * 1000);
     }
 }

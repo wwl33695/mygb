@@ -84,6 +84,8 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, int c
 //与相机进行消息交换的主线程
 int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 {
+    pthread_setname_np(pthread_self(), "sip_thread");
+
 	_gb28181Params *p28181Params = &pliveVideoParams->gb28181Param;
 	struct eXosip_t * peCtx = p28181Params->eCtx;
 

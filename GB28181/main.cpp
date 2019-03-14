@@ -20,6 +20,7 @@ int main(int argc, char *argv[])
 
 	camera.setdeviceip(cameraip);
 
+    pthread_setname_np(pthread_self(), "main_thread");
 	int width = 1080;
 	int height = 720;
 	int i = 0;
@@ -30,13 +31,13 @@ int main(int argc, char *argv[])
 		{
 			char filename[128] = {0};
 			sprintf(filename, "%d_1234.jpg", i);
-			cv::imwrite(filename, mat);
+//			cv::imwrite(filename, mat);
 
 			i++;
 		}
 
 		//		checkCameraStatus(&g_liveVideoParams);
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}
 
 /*
