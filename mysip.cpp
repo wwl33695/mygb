@@ -81,7 +81,6 @@ int initsession(jrtplib::RTPSession &sess, char* ip, uint16_t port)
 	if( status < 0 )
 		printf("AddDestination error \n");
 
-	printf("SendPacket \n");
 //	status = sess.SendPacket((void *)"1234567890",10,0,false,0);
 	status = sess.SendPacket(NULL, 0, 0, false, 0);
 	if( status < 0 )
