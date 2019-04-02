@@ -56,6 +56,7 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, char*
 		strcpy(param.sipId, deviceid);
 		strcpy(param.deviceip, deviceip);
 		strcpy(param.deviceport, deviceport);
+		param.pliveVideoParams = pliveVideoParams;
 		param.registerOk = 1;
 		param.fpH264 = NULL;
 	}
@@ -139,7 +140,7 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 {
     pthread_setname_np(pthread_self(), "sip_thread");
 
-	_gb28181Params *p28181Params = &pliveVideoParams->gb28181Param;
+	gb28181Params *p28181Params = &pliveVideoParams->gb28181Param;
 	struct eXosip_t * peCtx = p28181Params->eCtx;
 
 	//监听并回复摄像机消息
@@ -304,8 +305,10 @@ int mysip_uninit(struct eXosip_t *eCtx)
 }
 
 //请求视频信息，SDP信息
-int sendInvitePlay(gb28181Params *p28181Params, CameraParams *p, int rtp_recv_port)
+int sendInvitePlay(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
 {
+	gb28181Params *p28181Params = &pliveVideoParams->gb28181Param;
+
 	char dest_call[256], source_call[256], subject[128];
 	snprintf(dest_call, 256, "sip:%s@%s:%s", p->sipId, p->deviceip, p->deviceport);
 	snprintf(source_call, 256, "sip:%s@%s", p28181Params->localSipId, p28181Params->localIpAddr);
@@ -334,7 +337,7 @@ int sendInvitePlay(gb28181Params *p28181Params, CameraParams *p, int rtp_recv_po
 		"a=rtpmap:98 H264/90000\r\n"
 		"a=recvonly\r\n"
 		"y=0100000001\n", p->sipId, p28181Params->localIpAddr,
-		p28181Params->localIpAddr, rtp_recv_port);
+		p28181Params->localIpAddr, p->recvPort);
 	osip_message_set_body(invite, body, bodyLen);
 	osip_message_set_content_type(invite, "APPLICATION/SDP");
 	eXosip_lock(peCtx);

@@ -148,6 +148,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 	}
 
 	uint32_t last_ts = 0;
+	uint32_t error_count = 0;
 	//开始接收流包
 	while (p->running)
 	{
@@ -171,9 +172,11 @@ int jrtplib_rtp_recv_thread(void* arg)
 				{
 					printf("jrtplib_rtp_recv_thread:packet is null \n");
 					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+					error_count++;
 				}
 				else
 				{
+					error_count = 0;
 //					printf("Got packet! %d \n", pack->GetPayloadLength());
 
 					uint32_t ts = pack->GetTimestamp();
@@ -189,7 +192,18 @@ int jrtplib_rtp_recv_thread(void* arg)
 				}
 			} while (p->sess.GotoNextSourceWithData());
 		}
+		else
+		{
+			error_count++;			
+		}
 		p->sess.EndDataAccess();
+
+		if( error_count >= 3 )
+		{
+			error_count = 0;
+			printf("stream connection error \n");
+			sendInvitePlay(p->pliveVideoParams, p);
+		}
 
 //		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
@@ -268,7 +282,7 @@ int gb28181_startstream(void *handle, char* deviceip)
 	param->statusErrCnt = 0;
 	param->writefile = 1;
 
-	sendInvitePlay(&inst->gb28181Param, param, param->recvPort);
+	sendInvitePlay(inst, param);
 
 	param->rtpthread = std::thread(jrtplib_rtp_recv_thread, (void*)param);
 

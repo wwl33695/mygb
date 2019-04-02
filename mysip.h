@@ -33,7 +33,9 @@
 	#define MAX_PATH 128
 #endif
 
-typedef struct _gb28181Params{
+struct liveVideoStreamParams;
+
+typedef struct {
 	char platformSipId[MAX_PATH];
 	char platformIpAddr[MAX_PATH];
 	int platformSipPort;
@@ -68,28 +70,30 @@ typedef struct {
 	std::thread rtpthread;
 	PsPacketParser parser;
 	FFDecoder decoder;
+
+	liveVideoStreamParams *pliveVideoParams;
 } CameraParams;
 
-typedef struct _liveVideoStreamParams{
+struct liveVideoStreamParams {
 	std::map<std::string, CameraParams> mapCameraParams;
 	std::mutex cameraParamMutex;
 
 	gb28181Params gb28181Param;
 	int stream_input_type;
 	int running;
-} liveVideoStreamParams;
+};
 
 int getdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, CameraParams **param);
 
 //与相机进行消息交换的主线程
-int MsgThreadProc(_liveVideoStreamParams *p28181Params);
+int MsgThreadProc(liveVideoStreamParams *p28181Params);
 
 eXosip_t *mysip_init(int localport);
 
 int mysip_uninit(struct eXosip_t *eCtx);
 
 //请求视频信息，SDP信息
-int sendInvitePlay(gb28181Params *p28181Params, CameraParams *p, int rtp_recv_port);
+int sendInvitePlay(liveVideoStreamParams *pliveVideoParams, CameraParams *p);
 
 //停止视频回传
 int sendPlayBye(liveVideoStreamParams *pliveVideoParams, CameraParams *p);
