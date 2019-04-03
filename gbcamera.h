@@ -11,7 +11,8 @@
 class GBCamera
 {
 public:
-	int init(char* localip, int localport, char *localsipid);
+	int init(char* localip, int localport, char *localsipid, int gpu);
+	int uninit();
 
 	cv::Mat getframe();
 
@@ -19,7 +20,8 @@ public:
 
 private:
 	void *inst;
-	
+	int m_gpu;
+		
 	std::string m_deviceip;
 
 	int playrequested;

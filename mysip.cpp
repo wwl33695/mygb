@@ -1,4 +1,5 @@
 #include "mysip.h"
+#include <unistd.h>
 
 void RegisterSuccess(struct eXosip_t * peCtx, eXosip_event_t *je)
 {
@@ -146,12 +147,11 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 	//监听并回复摄像机消息
 	while (p28181Params->running)
 	{
-		eXosip_event_t *je = NULL;
 		//处理事件
-		je = eXosip_event_wait(peCtx, 0, 4);
+		eXosip_event_t *je = eXosip_event_wait(peCtx, 1, 4);
 		if (je == NULL)
 		{
-			osip_usleep(100 * 1000);
+			usleep(100 * 1000);
 			continue;
 		}
 

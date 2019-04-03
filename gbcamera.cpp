@@ -1,12 +1,26 @@
 #include "gbcamera.h"
 
-int GBCamera::init(char* localip, int localport, char *localsipid)
+int GBCamera::init(char* localip, int localport, char *localsipid, int gpu)
 {
 	playrequested = 0;
+	m_gpu = gpu;
 
 	inst = gb28181_init(localip, localport, localsipid);
 	if( !inst )
 		return -1;
+
+	return 0;
+}
+
+int GBCamera::uninit()
+{
+	if( inst && !m_deviceip.empty() )
+	{
+		gb28181_stopstream(inst, (char*)m_deviceip.c_str());
+	}
+
+	gb28181_uninit(inst);
+	inst = NULL;
 
 	return 0;
 }
@@ -28,9 +42,9 @@ cv::Mat GBCamera::getframe()
 
 	//	return 0;
 
-	if( !playrequested )
+	if( !playrequested && !m_deviceip.empty() )
 	{
-		gb28181_startstream(inst, (char*)m_deviceip.c_str());
+		gb28181_startstream(inst, (char*)m_deviceip.c_str(), m_gpu);
 		playrequested = 1;		
 	}
 

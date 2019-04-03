@@ -222,6 +222,12 @@ int jrtplib_rtp_recv_thread(void* arg)
 		p->fpH264 = NULL;
 	}
 
+	if( psBuf )
+	{
+		free(psBuf);
+		psBuf = NULL;
+	}
+
 	return 0;
 }
 
@@ -251,7 +257,7 @@ void *gb28181_init(char* localip, int localport, char *localsipid)
 	return inst;
 }
 
-int gb28181_startstream(void *handle, char* deviceip)
+int gb28181_startstream(void *handle, char* deviceip, int gpu)
 {
 	if (!handle || !deviceip)
 		return -1;
@@ -265,7 +271,7 @@ int gb28181_startstream(void *handle, char* deviceip)
 		return -1;
 	}
 
-	if( !param->decoder.GetCodec(27, 0) )
+	if( !param->decoder.GetCodec(27, gpu) )
 	{
 		printf("GetCodec error \n");
 		return -1;		

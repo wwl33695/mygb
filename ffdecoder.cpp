@@ -285,7 +285,7 @@ void FFDecoder::DecodeThread(FFDecoder *that)
 
         if( !pkt )
         {
-            usleep(40 * 1000);
+            usleep(20 * 1000);
             continue;
         }
 

@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
 	char *cameraip = argv[3];
 
 	GBCamera camera;
-	camera.init(localip, localport, "34020000002000000001");
+	camera.init(localip, localport, "34020000002000000001", 0);
 
 	camera.setdeviceip(cameraip);
 
