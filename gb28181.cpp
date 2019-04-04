@@ -112,6 +112,25 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 	return -1;
 }
 
+int checkErrorCount(CameraParams *p, int &error_count)
+{
+	if( error_count == 3 )
+	{
+		printf("stream connection error: sendPlayBye \n");
+		sendPlayBye(p->pliveVideoParams, p);
+	}
+	else if( error_count >= 5 )
+	{
+		printf("stream connection error: sendInvitePlay \n");
+		sendInvitePlay(p->pliveVideoParams, p);
+		error_count = 0;
+
+		return 0;
+	}
+
+	return -1;
+}
+
 int jrtplib_rtp_recv_thread(void* arg)
 {
     pthread_setname_np(pthread_self(), "recv_thread");
@@ -148,12 +167,18 @@ int jrtplib_rtp_recv_thread(void* arg)
 	}
 
 	uint32_t last_ts = 0;
-	uint32_t error_count = 0;
+	int error_count = 0;
 	//开始接收流包
 	while (p->running)
 	{
 #ifndef RTP_SUPPORT_THREAD
-		p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000));
+		bool dataavailable = false;
+		int ret = p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000), &dataavailable);
+
+		if( !dataavailable )
+			printf("ret = %d, dataavailable=%d \n", ret, dataavailable);
+		if( !dataavailable )
+			error_count++;
 
 		if( p->sess.Poll() < 0 )
 		{
@@ -166,43 +191,42 @@ int jrtplib_rtp_recv_thread(void* arg)
 		if (p->sess.GotoFirstSourceWithData())
 		{
 			do{
-				jrtplib::RTPPacket *pack = p->sess.GetNextPacket();
-
-				if( !pack )
+				while( 1 )
 				{
-					printf("jrtplib_rtp_recv_thread:packet is null \n");
-					std::this_thread::sleep_for(std::chrono::milliseconds(1));
-					error_count++;
-				}
-				else
-				{
-					error_count = 0;
-//					printf("Got packet! %d \n", pack->GetPayloadLength());
+					jrtplib::RTPPacket *pack = p->sess.GetNextPacket();
 
-					uint32_t ts = pack->GetTimestamp();
-					if (ts >= last_ts || abs(int(ts - last_ts))/90000 >= 3600 )
+					if( !pack )
 					{
-						ParsePsStream(psBuf, psLen, (char*)pack->GetPayloadData(), pack->GetPayloadLength(), p);
-						last_ts = ts;
+//						printf("jrtplib_rtp_recv_thread:packet is null \n");
+						std::this_thread::sleep_for(std::chrono::milliseconds(1));
+						break;
 					}
+					else
+					{
+						if( error_count < 3 )
+							error_count = 0;
+						
+//						printf("Got packet! %d \n", pack->GetPayloadLength());
 
-					//写入文件
-//					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
-					p->sess.DeletePacket(pack);
+						uint32_t ts = pack->GetTimestamp();
+						if (ts >= last_ts || abs(int(ts - last_ts))/90000 >= 3600 )
+						{
+							ParsePsStream(psBuf, psLen, (char*)pack->GetPayloadData(), pack->GetPayloadLength(), p);
+							last_ts = ts;
+						}
+
+						//写入文件
+	//					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
+						p->sess.DeletePacket(pack);
+					}
 				}
 			} while (p->sess.GotoNextSourceWithData());
 		}
-		else
-		{
-			error_count++;			
-		}
 		p->sess.EndDataAccess();
 
-		if( error_count >= 3 )
+		if( checkErrorCount(p, error_count) >= 0 )
 		{
-			error_count = 0;
-			printf("stream connection error \n");
-			sendInvitePlay(p->pliveVideoParams, p);
+			last_ts = 0;
 		}
 
 //		std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -286,7 +310,7 @@ int gb28181_startstream(void *handle, char* deviceip, int gpu)
 	param->running = 1;
 	param->status = 0;
 	param->statusErrCnt = 0;
-	param->writefile = 1;
+	param->writefile = 0;//1;
 
 	sendInvitePlay(inst, param);
 

@@ -120,7 +120,7 @@ bool FFDecoder::GetRGBData(uint8_t *data, int width, int height)
     {
         std::lock_guard<std::mutex> lock(m_mtx_frames);
         if (!m_frames.empty()) {
-//            printf("FFDecoder::GetRGBData:framesize = %d \n", m_frames.size());
+            printf("FFDecoder::GetRGBData:framesize = %d \n", m_frames.size());
             frame = m_frames.front();
             m_frames.pop_front();
 //            break;
@@ -279,7 +279,7 @@ void FFDecoder::DecodeThread(FFDecoder *that)
             {
                 pkt = that->m_pkts.front();
                 that->m_pkts.pop_front();
-//                printf("FFDecoder::DecodeThread:packetsize = %d \n", that->m_pkts.size());
+                printf("FFDecoder::DecodeThread:packetsize = %d \n", that->m_pkts.size());
             }
         }
 

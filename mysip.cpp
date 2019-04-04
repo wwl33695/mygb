@@ -123,7 +123,7 @@ int getremotertpport(osip_message_t * message)
 
 	if( !videomedia->m_port )
 		return -1;
-
+/*
 	if( videomedia->m_media )
 		printf("m_media=%s \n", videomedia->m_media);
 	if( videomedia->m_port )
@@ -132,7 +132,7 @@ int getremotertpport(osip_message_t * message)
 		printf("m_number_of_port=%s \n", videomedia->m_number_of_port);
 	if( videomedia->m_proto )
 		printf("m_proto=%s \n", videomedia->m_proto);
-
+*/
 	return atoi(videomedia->m_port);
 }
 
@@ -209,7 +209,7 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 				int port;
 				port = getremotertpport(je->response);
 				setdeviceinfo(pliveVideoParams, je->request->to->url->host, port, je->cid, je->did);
-				printf("call answered method:%s, call_id:%d, dialog_id:%d, port=%d \n", je->request->sip_method, je->cid, je->did, port);
+//				printf("call answered method:%s, call_id:%d, dialog_id:%d, port=%d \n", je->request->sip_method, je->cid, je->did, port);
 				osip_message_t *ack = NULL;
 				eXosip_call_build_ack(peCtx, je->did, &ack);
 				eXosip_lock(peCtx);
