@@ -172,7 +172,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 	while (p->running)
 	{
 #ifndef RTP_SUPPORT_THREAD
-		bool dataavailable = false;
+		bool dataavailable = true;
 		int ret = p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000), &dataavailable);
 
 		if( !dataavailable )
@@ -221,6 +221,10 @@ int jrtplib_rtp_recv_thread(void* arg)
 					}
 				}
 			} while (p->sess.GotoNextSourceWithData());
+		}
+		else
+		{
+//			error_count++;
 		}
 		p->sess.EndDataAccess();
 

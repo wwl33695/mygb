@@ -95,6 +95,7 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, int r
 {
 	pliveVideoParams->cameraParamMutex.lock();
 
+	printf("pre setdeviceinfo set cid:%s \n", deviceip);
 	if (pliveVideoParams->mapCameraParams.find(deviceip) != pliveVideoParams->mapCameraParams.end())
 	{
 		printf("setdeviceinfo set cid:%s \n", deviceip);
@@ -218,11 +219,9 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 			{
 				int port;
 				port = getremotertpport(je->response);
-				osip_via_t* via;
-				via = getvia(je->request);
 
-				setdeviceinfo(pliveVideoParams, via->host, port, je->cid, je->did);
-//				printf("call answered method:%s, call_id:%d, dialog_id:%d, port=%d \n", je->request->sip_method, je->cid, je->did, port);
+				setdeviceinfo(pliveVideoParams, je->request->to->url->host, port, je->cid, je->did);
+				printf("call answered method:%s, call_id:%d, dialog_id:%d, port=%d \n", je->request->sip_method, je->cid, je->did, port);
 				osip_message_t *ack = NULL;
 				eXosip_call_build_ack(peCtx, je->did, &ack);
 				eXosip_lock(peCtx);
