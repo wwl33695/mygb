@@ -111,6 +111,18 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, int r
 	return 0;
 }
 
+osip_via_t* getvia(osip_message_t * message)
+{
+	if( !message )
+		return NULL;
+
+	if( message->vias.nb_elt <= 0 )
+		return NULL;
+
+	osip_via_t *result = (osip_via_t*)message->vias.node->element;
+	return result;
+}
+
 int getremotertpport(osip_message_t * message)
 {
 	sdp_message_t *sdpmsg = eXosip_get_sdp_info(message);
@@ -163,10 +175,9 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 				if (MSG_IS_REGISTER(je->request))
 				{
 					printf("recv REGISTER \n");
-					setdeviceinfo(pliveVideoParams,
-						je->request->from->url->host,
-						je->request->from->url->port,
-						je->request->from->url->username);
+					osip_via_t* via;
+					via = getvia(je->request);
+					setdeviceinfo(pliveVideoParams, via->host, via->port, je->request->from->url->username);
 				}
 				else if (MSG_IS_MESSAGE(je->request))
 				{
@@ -178,10 +189,9 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 						char* p = strstr(body->body, "Keepalive");
 						if (p != NULL)
 						{
-							setdeviceinfo(pliveVideoParams,
-								je->request->from->url->host,
-								je->request->from->url->port,
-								je->request->from->url->username);
+							osip_via_t* via;
+							via = getvia(je->request);
+							setdeviceinfo(pliveVideoParams, via->host, via->port, je->request->from->url->username);
 
 							printf("msg body:%s\n", body->body);
 						}
@@ -208,7 +218,10 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 			{
 				int port;
 				port = getremotertpport(je->response);
-				setdeviceinfo(pliveVideoParams, je->request->to->url->host, port, je->cid, je->did);
+				osip_via_t* via;
+				via = getvia(je->request);
+
+				setdeviceinfo(pliveVideoParams, via->host, port, je->cid, je->did);
 //				printf("call answered method:%s, call_id:%d, dialog_id:%d, port=%d \n", je->request->sip_method, je->cid, je->did, port);
 				osip_message_t *ack = NULL;
 				eXosip_call_build_ack(peCtx, je->did, &ack);
