@@ -20,6 +20,7 @@
 #include <eXosip2/eXosip.h>
 
 #include "rtpsession.h"
+#include "rtprandomurandom.h"
 #include "rtpudpv4transmitter.h"
 #include "rtpipv4address.h"
 #include "rtpsessionparams.h"

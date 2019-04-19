@@ -46,8 +46,8 @@ FFDecoder::~FFDecoder()
 void FFDecoder::Stop()
 {
     m_stop = true;
-    m_read.join();
-    m_decode.join();
+    if (m_read.joinable()) m_read.join();
+    if (m_decode.joinable()) m_decode.join();
 }
 
 bool FFDecoder::OpenUrl(const char* url, int gpu)
@@ -140,13 +140,6 @@ bool FFDecoder::GetRGBData(uint8_t *data, int width, int height)
         int pitch[4] = { width * 3 };
         sws_scale(m_swsContext, (const uint8_t *const *)frame->data, frame->linesize,
                   0, frame->height, pixels, pitch);
-
-        if (frame->pts == 93600) {
-            FILE *file = fopen("1.rgb", "w+");
-            fwrite(data, width * height * 3, 1, file);
-            fclose(file);
-        }
-
     } else {
 
     }

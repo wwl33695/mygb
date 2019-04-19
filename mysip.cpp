@@ -83,10 +83,12 @@ int initsession(jrtplib::RTPSession &sess, char* ip, uint16_t port)
 	if( status < 0 )
 		printf("AddDestination error \n");
 
-//	status = sess.SendPacket((void *)"1234567890",10,0,false,0);
-	status = sess.SendPacket(NULL, 0, 0, false, 0);
-	if( status < 0 )
-		printf("SendPacket error \n");
+	for( int i=0; i<5; i++ )
+	{
+		status = sess.SendPacket(NULL, 0, 0, false, 0);
+		if( status < 0 )
+			printf("SendPacket error \n");		
+	}
 
 	return 0;
 }
@@ -178,7 +180,10 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 					printf("recv REGISTER \n");
 					osip_via_t* via;
 					via = getvia(je->request);
-					setdeviceinfo(pliveVideoParams, via->host, via->port, je->request->from->url->username);
+					char* deviceport = je->request->from->url->port;
+					if( !deviceport )
+						deviceport = via->port;
+					setdeviceinfo(pliveVideoParams, via->host, deviceport, je->request->from->url->username);
 				}
 				else if (MSG_IS_MESSAGE(je->request))
 				{
@@ -192,7 +197,11 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 						{
 							osip_via_t* via;
 							via = getvia(je->request);
-							setdeviceinfo(pliveVideoParams, via->host, via->port, je->request->from->url->username);
+							char* deviceport = je->request->from->url->port;
+							if( !deviceport )
+								deviceport = via->port;
+
+							setdeviceinfo(pliveVideoParams, via->host, deviceport, je->request->from->url->username);
 
 							printf("msg body:%s\n", body->body);
 						}

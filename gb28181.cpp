@@ -86,6 +86,21 @@ int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPa
 	return 0;
 }
 
+int getrandomport(uint16_t &port)
+{
+	jrtplib::RTPRandomURandom _rand;
+	if( _rand.Init() < 0 )
+		return -1;
+
+	port = _rand.GetRandom16();
+	port -= port % 2;
+	port %= 50000 ;
+	if( port < 10000 )
+		port += 10000;
+
+	return 0;
+}
+
 int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 {
 	uint16_t portbase;
@@ -96,8 +111,16 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 
 	sessparams.SetOwnTimestampUnit(1.0 / 9000.0);
 	sessparams.SetAcceptOwnPackets(true);
+	
+	uint16_t localport;
+	if( getrandomport(localport) < 0 )
+	{
+		printf("getrandomport error \n");
+		return -1;
+	}
 
-	for (uint16_t i = 6000; i < 60000; i+=2)
+	sess.Destroy();
+	for (uint16_t i = localport; i < 65000; i+=2)
 	{
 		transparams.SetPortbase(i);
 		int status = sess.Create(sessparams, &transparams);
@@ -114,14 +137,21 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 
 int checkErrorCount(CameraParams *p, int &error_count)
 {
-	if( error_count == 3 )
+	if( error_count == 7 )
 	{
 		printf("stream connection error: sendPlayBye \n");
 		sendPlayBye(p->pliveVideoParams, p);
 	}
-	else if( error_count >= 5 )
+	else if( error_count >= 10 )
 	{
 		printf("stream connection error: sendInvitePlay \n");
+
+		if( getrtpsession(p->sess, p->recvPort) < 0 )
+		{
+			printf("[checkErrorCount]  getrtpsession error \n");
+			return -1;
+		}
+
 		sendInvitePlay(p->pliveVideoParams, p);
 		error_count = 0;
 
@@ -203,7 +233,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 					}
 					else
 					{
-						if( error_count < 3 )
+						if( error_count < 7 )
 							error_count = 0;
 						
 //						printf("Got packet! %d \n", pack->GetPayloadLength());
