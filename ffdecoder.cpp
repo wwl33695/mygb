@@ -286,7 +286,7 @@ void FFDecoder::DecodeThread(FFDecoder *that)
         int ret = avcodec_decode_video2(that->m_avctx, frame, &got_frame, pkt);
         if (ret < 0) 
         {
-            fprintf(stderr, "Error decoding video frame \n");
+            printf("Error decoding video frame \n");
 //            break;
         }
         else if( got_frame )
