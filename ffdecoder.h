@@ -11,6 +11,7 @@ struct SwsContext;
 struct AVStream;
 struct AVPacket;
 struct AVFrame;
+struct AVCodecParserContext;
 
 class FFDecoder {
 public:
@@ -29,20 +30,30 @@ public:
 
     int m_width;
     int m_height;
+    uint64_t h_decoder;
+    uint64_t cnrt_dev;
+    void *mlu_ptrs;
+    bool m_useCambricon;
+
+    std::mutex m_mtx_frames;
+    std::list<AVFrame*> m_frames;
 private:
     static void ReadThread(FFDecoder *that);
     static void DecodeThread(FFDecoder *that);
+    int CreateDecoder(int codec_id, int device);
 
 private:
     AVFormatContext *m_ifmt_ctx;
     AVCodecContext *m_avctx;
     SwsContext *m_swsContext;
+    AVCodecParserContext *m_parser;
     int m_video_index;
 
     std::mutex m_mtx;
     std::list<AVPacket*> m_pkts;
-    std::mutex m_mtx_frames;
-    std::list<AVFrame*> m_frames;
+
+    int m_device;
+    int m_codec_id;
 
     bool m_stop;
     std::thread m_read;

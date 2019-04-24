@@ -35,7 +35,7 @@ int getdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, Camer
 	std::map<std::string, CameraParams>::iterator iter = pliveVideoParams->mapCameraParams.find(deviceip);
 	if (iter == pliveVideoParams->mapCameraParams.end())
 	{
-		printf("can not find camera:%s \n", deviceip);
+		printf("can not find camera:%s, deviceip length = %d \n", deviceip, strlen(deviceip));
 		pliveVideoParams->cameraParamMutex.unlock();
 		return -1;
 	}
@@ -52,7 +52,7 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, char*
 
 	if (pliveVideoParams->mapCameraParams.find(deviceip) == pliveVideoParams->mapCameraParams.end())
 	{
-		printf("setdeviceinfo add camerainfo:%s \n", deviceip);
+		printf("setdeviceinfo add camerainfo:%s deviceip length=%d \n", deviceip, strlen(deviceip));
 		CameraParams &param = pliveVideoParams->mapCameraParams[deviceip];
 		strcpy(param.sipId, deviceid);
 		strcpy(param.deviceip, deviceip);
