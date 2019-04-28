@@ -44,7 +44,12 @@ cv::Mat GBCamera::getframe()
 
 	if( !playrequested && !m_deviceip.empty() )
 	{
-		gb28181_startstream(inst, (char*)m_deviceip.c_str(), m_gpu);
+	    char* recordgb = getenv("recordgb");
+	    int needrecord = 0;
+	    if( recordgb )
+	    	needrecord = atoi(recordgb);
+
+		gb28181_startstream(inst, (char*)m_deviceip.c_str(), m_gpu, needrecord);
 		playrequested = 1;		
 	}
 

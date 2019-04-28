@@ -296,6 +296,16 @@ bool FFDecoder::SetPacketData(uint8_t *data, int length)
 #ifdef USE_CAMBRICON
     if( m_width < 0 || m_height < 0 )
     {    
+        int pkttype = ((char)data[4])&0x1f;
+        printf("SetPacketData: %d %d %d %d %d, length=%d \n", 
+                (char)data[0], (char)data[1], (char)data[2], (char)data[3], pkttype, length);
+
+        if( pkttype != 7 )
+        {
+            printf("[FFDecoder] SetPacketData: skip non sps packet \n");
+            return false;
+        }
+
         int ret = av_parser_parse2(m_parser, m_avctx, &pkt->data, &pkt->size,
                                data, length, AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
         if (ret < 0) {
@@ -322,6 +332,8 @@ bool FFDecoder::SetPacketData(uint8_t *data, int length)
         }
 
         m_useCambricon = true;
+        if( !m_decode.joinable() )
+            m_decode = std::thread(DecodeThread, this);
     }
 #endif
 
@@ -434,7 +446,6 @@ bool FFDecoder::GetCodec(int codec_id, int gpu)
     m_parser->width = m_parser->height = -1;
 
     m_avctx = avctx;
-    m_decode = std::thread(DecodeThread, this);
 
     goto out;
 

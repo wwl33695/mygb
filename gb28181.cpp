@@ -220,8 +220,8 @@ int jrtplib_rtp_recv_thread(void* arg)
 		p->sess.BeginDataAccess();
 		if (p->sess.GotoFirstSourceWithData())
 		{
-			do{
-				while( 1 )
+//			do{
+//				while( 1 )
 				{
 					jrtplib::RTPPacket *pack = p->sess.GetNextPacket();
 
@@ -229,7 +229,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 					{
 //						printf("jrtplib_rtp_recv_thread:packet is null \n");
 						std::this_thread::sleep_for(std::chrono::milliseconds(1));
-						break;
+//						break;
 					}
 					else
 					{
@@ -250,11 +250,7 @@ int jrtplib_rtp_recv_thread(void* arg)
 						p->sess.DeletePacket(pack);
 					}
 				}
-			} while (p->sess.GotoNextSourceWithData());
-		}
-		else
-		{
-//			error_count++;
+//			} while (p->sess.GotoNextSourceWithData());
 		}
 		p->sess.EndDataAccess();
 
@@ -315,7 +311,7 @@ void *gb28181_init(char* localip, int localport, char *localsipid)
 	return inst;
 }
 
-int gb28181_startstream(void *handle, char* deviceip, int gpu)
+int gb28181_startstream(void *handle, char* deviceip, int gpu, int record2file)
 {
 	if (!handle || !deviceip)
 		return -1;
@@ -344,7 +340,7 @@ int gb28181_startstream(void *handle, char* deviceip, int gpu)
 	param->running = 1;
 	param->status = 0;
 	param->statusErrCnt = 0;
-	param->writefile = 0;//1;
+	param->writefile = record2file;//1;
 
 	sendInvitePlay(inst, param);
 

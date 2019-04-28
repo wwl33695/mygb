@@ -5,7 +5,7 @@
 
 void *gb28181_init(char* localip, int localport, char *localsipid);
 
-int gb28181_startstream(void *handle, char* deviceip, int gpu);
+int gb28181_startstream(void *handle, char* deviceip, int gpu, int record2file);
 
 int gb28181_stopstream(void *handle, char* deviceip);
 
