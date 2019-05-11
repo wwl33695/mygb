@@ -4,31 +4,6 @@
 	#include <arpa/inet.h>
 #else
 	#include <winsock2.h>
-
-	#pragma comment(lib, "ws2_32.lib")
-	#pragma comment(lib, "mxml1.lib")
-	#pragma comment(lib, "eXosip.lib")
-	#pragma comment(lib, "libcares.lib")
-	#pragma comment(lib, "osip2.lib")
-
-	//Dnsapi.lib;Iphlpapi.lib;ws2_32.lib;eXosip.lib;osip2.lib;osipparser2.lib;Qwave.lib;libcares.lib;delayimp.lib;
-	//忽略 libcmt.lib默认库
-	#pragma comment(lib, "Dnsapi.lib")
-	#pragma comment(lib, "Iphlpapi.lib")
-	#pragma comment(lib, "osipparser2.lib")
-	#pragma comment(lib, "Qwave.lib")
-	#pragma comment(lib, "delayimp.lib")
-
-	#ifdef DEBUG
-	#pragma comment(lib, "jrtplib_d.lib") 
-	#pragma comment(lib,"jthread_d.lib")
-	#pragma comment(lib,"WS2_32.lib")
-	#else
-	#pragma comment(lib, "jrtplib.lib") 
-	#pragma comment(lib,"jthread.lib")
-	#pragma comment(lib,"WS2_32.lib")
-	#endif
-
 #endif // WIN32
 
 #include "mysip.h"
@@ -112,7 +87,7 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 	sessparams.SetOwnTimestampUnit(1.0 / 9000.0);
 	sessparams.SetAcceptOwnPackets(true);
 	
-	uint16_t localport;
+	uint16_t localport = 16000;
 	if( getrandomport(localport) < 0 )
 	{
 		printf("getrandomport error \n");
@@ -199,12 +174,13 @@ int jrtplib_rtp_recv_thread(void* arg)
 
 	uint32_t last_ts = 0;
 	int error_count = 0;
+	int ret = -1;
 	//开始接收流包
 	while (p->running)
 	{
 #ifndef RTP_SUPPORT_THREAD
 		bool dataavailable = true;
-		int ret = p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000), &dataavailable);
+		ret = p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000), &dataavailable);
 
 		if( !dataavailable )
 			printf("ret = %d, dataavailable=%d \n", ret, dataavailable);

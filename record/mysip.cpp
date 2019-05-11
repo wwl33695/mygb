@@ -138,17 +138,32 @@ int getremotertpport(osip_message_t * message)
 
 	if( !videomedia->m_port )
 		return -1;
-/*
-	if( videomedia->m_media )
-		printf("m_media=%s \n", videomedia->m_media);
-	if( videomedia->m_port )
-		printf("m_port=%s \n", videomedia->m_port);
-	if( videomedia->m_number_of_port )
-		printf("m_number_of_port=%s \n", videomedia->m_number_of_port);
-	if( videomedia->m_proto )
-		printf("m_proto=%s \n", videomedia->m_proto);
-*/
+
 	return atoi(videomedia->m_port);
+}
+
+int processackmsg(liveVideoStreamParams *pliveVideoParams, osip_message_t *ack)
+{
+	if( !ack ) return -1;
+
+	if( ack->req_uri->port == NULL )
+	{
+		printf("processackmsg: ack->req_uri->host: %s \n", ack->req_uri->host);
+		printf("processackmsg: ack->req_uri->port is null \n");
+
+		CameraParams *param = NULL;
+		getdeviceinfo(pliveVideoParams, ack->req_uri->host, &param);
+		if( !param )
+		{
+			printf("processackmsg: camera not found \n ");
+			return -1;
+		}
+		
+        ack->req_uri->port = (char *) osip_malloc (strlen(param->deviceport)+1);
+        strcpy(ack->req_uri->port, param->deviceport);
+	}
+
+	return 0;
 }
 
 //与相机进行消息交换的主线程
@@ -234,6 +249,7 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 				osip_message_t *ack = NULL;
 				eXosip_call_build_ack(peCtx, je->did, &ack);
 				eXosip_lock(peCtx);
+				processackmsg(pliveVideoParams, ack);
 				eXosip_call_send_ack(peCtx, je->did, ack);
 				eXosip_unlock(peCtx);
 				break;
@@ -303,10 +319,11 @@ struct eXosip_t *mysip_init(int localport)
 	}
 
 	//打开一个UDP socket 接收信号
+//	ret = eXosip_listen_addr(eCtx, IPPROTO_TCP, NULL, localport, AF_INET, 0);
 	ret = eXosip_listen_addr(eCtx, IPPROTO_UDP, NULL, localport, AF_INET, 0);
 	if (ret != OSIP_SUCCESS)
 	{
-		printf("eXosip_listen_addr udp error!");
+		printf("eXosip_listen_addr udp error \n");
 		osip_free(eCtx);
 		return NULL;
 	}
