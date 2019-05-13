@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <config>
-	<server_ip>10.0.1.222</server_ip>
+	<server_ip>192.168.1.50</server_ip>
 	<server_port>5060</server_port>
 	<server_id>34020000002000000001</server_id>
-	<server_domain>10.0.1.59</server_domain>
-	<device_id>34020000001320000001</device_id>
-	<channel_id>34020000001320000001</channel_id>
+	<server_domain>3402000000</server_domain>
+	<device_id>34020000001110000001</device_id>
+	<channel_id>34020000001310000001</channel_id>
 	<password>12345678</password>
 	<protocol>udp</protocol>
 	<reg_expires>3600</reg_expires>
