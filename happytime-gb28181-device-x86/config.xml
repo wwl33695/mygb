@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config>
+	<server_ip>192.168.1.50</server_ip>
+	<server_port>5060</server_port>
+	<server_id>34020000002000000001</server_id>
+	<server_domain>3402000000</server_domain>
+	<device_id>34020000001110000001</device_id>
+	<channel_id>34020000001310000001</channel_id>
+	<password>12345678</password>
+	<protocol>udp</protocol>
+	<reg_expires>3600</reg_expires>
+	<heartbeat_interval>10</heartbeat_interval>
+	<log_enable>1</log_enable>
+	<log_level>1</log_level>
+</config>
