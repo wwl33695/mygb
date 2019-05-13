@@ -82,9 +82,10 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 	int i, num;
 
 	jrtplib::RTPUDPv4TransmissionParams transparams;
-	jrtplib::RTPSessionParams sessparams;
+	transparams.SetRTPReceiveBuffer(10 * 1024 * 1024);
 
-	sessparams.SetOwnTimestampUnit(1.0 / 9000.0);
+	jrtplib::RTPSessionParams sessparams;
+	sessparams.SetOwnTimestampUnit(1.0 / 90000.0);
 	sessparams.SetAcceptOwnPackets(true);
 	
 	uint16_t localport = 16000;
@@ -113,12 +114,12 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 
 int checkErrorCount(CameraParams *p, int &error_count)
 {
-	if( error_count == 7 )
+	if( error_count == 7 * 1000 )
 	{
 		printf("stream connection error: sendPlayBye \n");
 		sendPlayBye(p->pliveVideoParams, p);
 	}
-	else if( error_count >= 10 )
+	else if( error_count >= 10 * 1000 )
 	{
 		printf("stream connection error: sendInvitePlay \n");
 
@@ -178,32 +179,18 @@ int jrtplib_rtp_recv_thread(void* arg)
 	//开始接收流包
 	while (p->running)
 	{
-#ifndef RTP_SUPPORT_THREAD
-		bool dataavailable = true;
-		ret = p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000), &dataavailable);
-
-		if( !dataavailable )
-			printf("ret = %d, dataavailable=%d \n", ret, dataavailable);
-		if( !dataavailable )
-			error_count++;
-
-		if( p->sess.Poll() < 0 )
-		{
-			printf("sess.Poll() error \n");
-			break;
-		}
-#endif // RTP_SUPPORT_THREAD
-
+		int needsleep = 0;
 		p->sess.BeginDataAccess();
 		if (p->sess.GotoFirstSourceWithData())
 		{
 			do
 			{
-				while( jrtplib::RTPPacket *pack = p->sess.GetNextPacket() )
+//				while( jrtplib::RTPPacket *pack = p->sess.GetNextPacket() )
+				if( jrtplib::RTPPacket *pack = p->sess.GetNextPacket() )
 				{
 //					printf("Got packet! %d \n", pack->GetPayloadLength());
 
-					if( error_count < 7 )
+					if( error_count < 7 * 1000 )
 						error_count = 0;
 					
 					uint32_t ts = pack->GetTimestamp();
@@ -219,12 +206,22 @@ int jrtplib_rtp_recv_thread(void* arg)
 				}
 			} while (p->sess.GotoNextSourceWithData());
 		}
+		else
+		{
+//			printf("no data found \n");
+			needsleep = 1;
+			error_count++;
+		}
+
 		p->sess.EndDataAccess();
 
 		if( checkErrorCount(p, error_count) >= 0 )
 		{
 			last_ts = 0;
 		}
+	
+		if( needsleep )		
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
 	p->sess.BYEDestroy(jrtplib::RTPTime(0, 1000), 0, 0);
