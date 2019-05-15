@@ -2,6 +2,7 @@
 #ifndef WIN32
 	#include <netinet/in.h>
 	#include <arpa/inet.h>
+	#include <unistd.h>
 #else
 	#include <winsock2.h>
 #endif // WIN32
@@ -9,6 +10,76 @@
 #include "mysip.h"
 
 #define PS_BUF_SIZE         (1024*1024*4)
+
+typedef struct RTP_HEADER
+{
+	uint16_t cc : 4;
+	uint16_t extbit : 1;
+	uint16_t padbit : 1;
+	uint16_t version : 2;
+	uint16_t paytype : 7;  //负载类型
+	uint16_t markbit : 1;  //1表示前面的包为一个解码单元,0表示当前解码单元未结束
+	uint16_t seq_number;  //序号
+	uint32_t timestamp; //时间戳
+	uint32_t ssrc;  //循环校验码
+	//uint32_t csrc[16];
+} RTP_header_t;
+
+#define APP_ERR printf
+
+//初始化udp套接字
+int init_udpsocket(int port)
+{
+	int err = -1;
+	int socket_fd;
+
+	socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (socket_fd < 0)
+	{
+		APP_ERR("socket failed, port:%d", port);
+		return -1;
+	}
+	
+	struct sockaddr_in servaddr;
+	memset(&servaddr, 0, sizeof(struct sockaddr_in));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(port);
+
+	err = bind(socket_fd, (struct sockaddr*)&servaddr, sizeof(struct sockaddr_in));
+	if (err < 0)
+	{
+		APP_ERR("bind failed, port:%d", port);
+		return -2;
+	}
+
+	/*set enable MULTICAST LOOP */
+	int loop = 4*1024*1024;
+	err = setsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (const char*)&loop, sizeof(loop));
+	//err = setsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
+	if (err < 0)
+	{
+		APP_ERR("setsockopt IP_MULTICAST_LOOP failed, port:%d", port);
+		return -3;
+	}
+
+	return socket_fd;
+}
+
+//关闭套接字
+void release_udpsocket(int socket_fd)
+{
+	close(socket_fd);
+}
+
+int recv_udpsocket(int socket_fd, char* rtpbuf, int buflen)
+{
+	//接收到的rtp流数据长度
+	struct sockaddr_in servaddr;
+	socklen_t addr_len = sizeof(struct sockaddr_in);
+
+	return recvfrom(socket_fd, rtpbuf, buflen, 0, (struct sockaddr*)&servaddr, &addr_len);
+}
 
 int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPayloadLength, CameraParams *p)
 {
@@ -138,12 +209,20 @@ int checkErrorCount(CameraParams *p, int &error_count)
 	return -1;
 }
 
-int jrtplib_rtp_recv_thread(void* arg)
+//接收相机回传的rtp视频流
+int rtp_recv_thread(void *arg)
 {
-    pthread_setname_np(pthread_self(), "recv_thread");
+    pthread_setname_np(pthread_self(), "rtp_recv_thread");
 
 	//获取相机参数
 	CameraParams *p = (CameraParams *)arg;
+
+	int socket_fd = init_udpsocket(p->recvPort);
+	if (socket_fd < 0)
+	{
+		printf("start socket port %d success\n", p->recvPort);
+		return -1;
+	}
 
 	char *psBuf = (char *)malloc(PS_BUF_SIZE);
 	if (psBuf == NULL)
@@ -173,62 +252,22 @@ int jrtplib_rtp_recv_thread(void* arg)
 		printf("fopen %s failed \n", filename);
 	}
 
-	uint32_t last_ts = 0;
-	int error_count = 0;
-	int ret = -1;
-	//开始接收流包
+	char rtpbuf[1600] = {0};
 	while (p->running)
-	{
-#ifndef RTP_SUPPORT_THREAD
-		printf("not define RTP_SUPPORT_THREAD \n");
-#endif
+	{	
+		int recvLen = recv_udpsocket(socket_fd, rtpbuf, sizeof(rtpbuf));
+		printf("recvfrom, recvLen=%d \n",recvLen);
 
-		int needsleep = 0;
-		p->sess.BeginDataAccess();
-		if (p->sess.GotoFirstSourceWithData())
+		//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
+		if (recvLen > 12)
 		{
-			do
-			{
-//				while( jrtplib::RTPPacket *pack = p->sess.GetNextPacket() )
-				if( jrtplib::RTPPacket *pack = p->sess.GetNextPacket() )
-				{
-//					printf("Got packet! %d \n", pack->GetPayloadLength());
-
-					if( error_count < 7 * 1000 )
-						error_count = 0;
-					
-					uint32_t ts = pack->GetTimestamp();
-					if (ts >= last_ts || abs(int(ts - last_ts))/90000 >= 3600 )
-					{
-						ParsePsStream(psBuf, psLen, (char*)pack->GetPayloadData(), pack->GetPayloadLength(), p);
-						last_ts = ts;
-					}
-
-					//写入文件
-//					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
-					p->sess.DeletePacket(pack);
-				}
-			} while (p->sess.GotoNextSourceWithData());
+//			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
+			//写入文件
+			fwrite(rtpbuf+12, 1, recvLen-12, p->fpH264);
 		}
-		else
-		{
-//			printf("no data found \n");
-			needsleep = 1;
-			error_count++;
-		}
-
-		p->sess.EndDataAccess();
-
-		if( checkErrorCount(p, error_count) >= 0 )
-		{
-			last_ts = 0;
-		}
-	
-		if( needsleep )		
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
-	p->sess.BYEDestroy(jrtplib::RTPTime(0, 1000), 0, 0);
+	release_udpsocket(socket_fd);
 
 #ifdef WIN32
 	WSACleanup();
@@ -296,12 +335,15 @@ int gb28181_startstream(void *handle, char* deviceip, int gpu, int record2file)
 		printf("GetCodec error \n");
 		return -1;		
 	}
-*/
+
 	if (getrtpsession(param->sess, param->recvPort) < 0)
 	{
 		printf("getrtpsession error \n");
 		return -1;
 	}
+*/
+	
+	param->recvPort = 16000;
 
 	param->running = 1;
 	param->status = 0;
@@ -310,7 +352,8 @@ int gb28181_startstream(void *handle, char* deviceip, int gpu, int record2file)
 
 	sendInvitePlay(inst, param);
 
-	param->rtpthread = std::thread(jrtplib_rtp_recv_thread, (void*)param);
+//	param->rtpthread = std::thread(jrtplib_rtp_recv_thread, (void*)param);
+	param->rtpthread = std::thread(rtp_recv_thread, (void*)param);
 
 	return 0;
 }
