@@ -297,7 +297,8 @@ int rtp_recv_thread(void *arg)
 //			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
 			//Ð´ÈëÎÄ¼þ
 //			fwrite(packdata.data+12, 1, recvLen-12, p->fpH264);
-
+			packdata.length =  recvLen;
+			
 			p->queueMutex.lock();
 			p->queueData.push(packdata);
 			p->queueMutex.unlock();

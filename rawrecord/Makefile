@@ -7,7 +7,7 @@ CPPFLAGS = -fPIC -g -w -std=c++11 -I../libosip2-5.0.0/include -I../libexosip2-5.
 	   -I../ffmpeg-3.4.5/include/ 
 
 LINK_FLAGS = -w -g -D__STDC_CONSTANT_MACROS
-LIBS = -lpthread  -lortp -ljthread -losip2 -losipparser2 -leXosip2 \
+LIBS = -lpthread -losip2 -losipparser2 -leXosip2 \
 		-lresolv
 
 #########################################################
