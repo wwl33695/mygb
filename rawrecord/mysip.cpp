@@ -66,7 +66,7 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, char*
 
 	return 0;
 }
-
+/*
 int initsession(jrtplib::RTPSession &sess, char* ip, uint16_t port)
 {
 	if( !ip || port <= 0 )
@@ -92,7 +92,7 @@ int initsession(jrtplib::RTPSession &sess, char* ip, uint16_t port)
 
 	return 0;
 }
-
+*/
 int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, int rtpport, int cid, int did)
 {
 	pliveVideoParams->cameraParamMutex.lock();
@@ -106,7 +106,7 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, int r
 		param.call_id = cid;
 		param.dialog_id = did;
 
-		initsession( param.sess, deviceip, rtpport);
+//		initsession( param.sess, deviceip, rtpport);
 	}
 
 	pliveVideoParams->cameraParamMutex.unlock();

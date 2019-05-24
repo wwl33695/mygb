@@ -81,6 +81,7 @@ int recv_udpsocket(int socket_fd, char* rtpbuf, int buflen)
 	return recvfrom(socket_fd, rtpbuf, buflen, 0, (struct sockaddr*)&servaddr, &addr_len);
 }
 
+////////////////////////////
 int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPayloadLength, CameraParams *p)
 {
 	static uint32_t cnt = 0;
@@ -134,6 +135,7 @@ int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPa
 
 int getrandomport(uint16_t &port)
 {
+/*
 	jrtplib::RTPRandomURandom _rand;
 	if( _rand.Init() < 0 )
 		return -1;
@@ -143,10 +145,10 @@ int getrandomport(uint16_t &port)
 	port %= 50000 ;
 	if( port < 10000 )
 		port += 10000;
-
+*/
 	return 0;
 }
-
+/*
 int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 {
 	uint16_t portbase;
@@ -182,7 +184,7 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 	}
 	return -1;
 }
-
+*/
 int checkErrorCount(CameraParams *p, int &error_count)
 {
 	if( error_count == 7 * 1000 )
@@ -193,13 +195,13 @@ int checkErrorCount(CameraParams *p, int &error_count)
 	else if( error_count >= 10 * 1000 )
 	{
 		printf("stream connection error: sendInvitePlay \n");
-
+/*
 		if( getrtpsession(p->sess, p->recvPort) < 0 )
 		{
 			printf("[checkErrorCount]  getrtpsession error \n");
 			return -1;
 		}
-
+*/
 		sendInvitePlay(p->pliveVideoParams, p);
 		error_count = 0;
 
@@ -207,6 +209,35 @@ int checkErrorCount(CameraParams *p, int &error_count)
 	}
 
 	return -1;
+}
+
+int parse_thread(void *arg)
+{
+    pthread_setname_np(pthread_self(), "parse_thread");
+
+	//获取相机参数
+	CameraParams *p = (CameraParams *)arg;
+	while (p->running)
+	{
+		RTPData packdata = {0};
+
+		p->queueMutex.lock();
+		if( p->queueData.empty() )
+		{
+			p->queueMutex.unlock();
+	
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			continue;
+		}
+
+		packdata = p->queueData.front();
+		p->queueData.pop();
+		p->queueMutex.unlock();
+
+		fwrite(packdata.data+12, 1, packdata.length-12, p->fpH264);
+	}
+	
+	return 0;
 }
 
 //接收相机回传的rtp视频流
@@ -220,7 +251,7 @@ int rtp_recv_thread(void *arg)
 	int socket_fd = init_udpsocket(p->recvPort);
 	if (socket_fd < 0)
 	{
-		printf("start socket port %d success\n", p->recvPort);
+		printf("init_udpsocket error: port %d \n", p->recvPort);
 		return -1;
 	}
 
@@ -255,7 +286,9 @@ int rtp_recv_thread(void *arg)
 	char rtpbuf[1600] = {0};
 	while (p->running)
 	{	
-		int recvLen = recv_udpsocket(socket_fd, rtpbuf, sizeof(rtpbuf));
+		RTPData packdata;
+		int recvLen = recv_udpsocket(socket_fd, packdata.data, sizeof(packdata.data));
+//		int recvLen = recv_udpsocket(socket_fd, rtpbuf, sizeof(rtpbuf));
 		printf("recvfrom, recvLen=%d \n",recvLen);
 
 		//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
@@ -263,7 +296,11 @@ int rtp_recv_thread(void *arg)
 		{
 //			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
 			//写入文件
-			fwrite(rtpbuf+12, 1, recvLen-12, p->fpH264);
+//			fwrite(packdata.data+12, 1, recvLen-12, p->fpH264);
+
+			p->queueMutex.lock();
+			p->queueData.push(packdata);
+			p->queueMutex.unlock();
 		}
 	}
 
@@ -354,6 +391,7 @@ int gb28181_startstream(void *handle, char* deviceip, int gpu, int record2file)
 
 //	param->rtpthread = std::thread(jrtplib_rtp_recv_thread, (void*)param);
 	param->rtpthread = std::thread(rtp_recv_thread, (void*)param);
+	param->parsethread = std::thread(parse_thread, (void*)param);
 
 	return 0;
 }

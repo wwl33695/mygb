@@ -16,6 +16,9 @@
 #include <stdio.h>
 #include <iostream>
 #include <string>
+#include <queue>
+#include <mutex>
+
 #include <time.h>
 #include <eXosip2/eXosip.h>
 
@@ -35,6 +38,11 @@
 #endif
 
 struct liveVideoStreamParams;
+
+typedef struct {
+	char data[1600];
+	int length;
+} RTPData;
 
 typedef struct {
 	char platformSipId[MAX_PATH];
@@ -67,12 +75,16 @@ typedef struct {
 	int registerOk;
 	int writefile;
 
-	jrtplib::RTPSession sess;
+//	jrtplib::RTPSession sess;
 	std::thread rtpthread;
+	std::thread parsethread;
 	PsPacketParser parser;
 //	FFDecoder decoder;
 
 	liveVideoStreamParams *pliveVideoParams;
+
+	std::queue<RTPData> queueData;
+	std::mutex queueMutex;
 } CameraParams;
 
 struct liveVideoStreamParams {
