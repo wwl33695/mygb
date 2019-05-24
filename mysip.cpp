@@ -32,7 +32,7 @@ int getdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, Camer
 {
 	pliveVideoParams->cameraParamMutex.lock();
 
-	std::map<std::string, CameraParams>::iterator iter = pliveVideoParams->mapCameraParams.find(deviceip);
+	std::map<std::string, CameraParams*>::iterator iter = pliveVideoParams->mapCameraParams.find(deviceip);
 	if (iter == pliveVideoParams->mapCameraParams.end())
 	{
 		printf("can not find camera:%s, deviceip length = %d \n", deviceip, strlen(deviceip));
@@ -40,7 +40,7 @@ int getdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, Camer
 		return -1;
 	}
 
-	*param = &iter->second;
+	*param = iter->second;
 	pliveVideoParams->cameraParamMutex.unlock();
 
 	return 0;
@@ -50,16 +50,26 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, char*
 {
 	pliveVideoParams->cameraParamMutex.lock();
 
-	if (pliveVideoParams->mapCameraParams.find(deviceip) == pliveVideoParams->mapCameraParams.end())
+	std::map<std::string, CameraParams*>::iterator iter = pliveVideoParams->mapCameraParams.find(deviceip);
+	if (iter == pliveVideoParams->mapCameraParams.end())
 	{
 		printf("setdeviceinfo add camerainfo:%s deviceip length=%d \n", deviceip, strlen(deviceip));
-		CameraParams &param = pliveVideoParams->mapCameraParams[deviceip];
-		strcpy(param.sipId, deviceid);
-		strcpy(param.deviceip, deviceip);
-		strcpy(param.deviceport, deviceport);
-		param.pliveVideoParams = pliveVideoParams;
-		param.registerOk = 1;
-		param.fpH264 = NULL;
+		CameraParams *param = new (std::nothrow) CameraParams;
+		if( !param )
+		{
+			printf("setdeviceinfo new CameraParams error \n");
+
+			pliveVideoParams->cameraParamMutex.unlock();
+			return -1;
+		}
+		strcpy(param->sipId, deviceid);
+		strcpy(param->deviceip, deviceip);
+		strcpy(param->deviceport, deviceport);
+		param->pliveVideoParams = pliveVideoParams;
+		param->registerOk = 1;
+		param->fpH264 = NULL;
+
+		pliveVideoParams->mapCameraParams[deviceip] = param;
 	}
 
 	pliveVideoParams->cameraParamMutex.unlock();
@@ -98,16 +108,47 @@ int setdeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip, int r
 	pliveVideoParams->cameraParamMutex.lock();
 
 	printf("pre setdeviceinfo set cid:%s \n", deviceip);
-	if (pliveVideoParams->mapCameraParams.find(deviceip) != pliveVideoParams->mapCameraParams.end())
+	std::map<std::string, CameraParams*>::iterator iter = pliveVideoParams->mapCameraParams.find(deviceip);
+	if (iter == pliveVideoParams->mapCameraParams.end())
 	{
-		printf("setdeviceinfo set cid:%s \n", deviceip);
-
-		CameraParams &param = pliveVideoParams->mapCameraParams[deviceip];
-		param.call_id = cid;
-		param.dialog_id = did;
-
-		initsession( param.sess, deviceip, rtpport);
+		printf("can not find camera:%s, deviceip length = %d \n", deviceip, strlen(deviceip));
+		pliveVideoParams->cameraParamMutex.unlock();
+		return -1;
 	}
+
+	printf("setdeviceinfo set cid:%s \n", deviceip);
+
+	CameraParams *param = iter->second;//pliveVideoParams->mapCameraParams[deviceip];
+	param->call_id = cid;
+	param->dialog_id = did;
+
+	initsession( param->sess, deviceip, rtpport);
+
+	pliveVideoParams->cameraParamMutex.unlock();
+
+	return 0;
+}
+
+int deletedeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip)
+{
+	pliveVideoParams->cameraParamMutex.lock();
+
+	printf("pre setdeviceinfo set cid:%s \n", deviceip);
+	std::map<std::string, CameraParams*>::iterator iter = pliveVideoParams->mapCameraParams.find(deviceip);
+	if (iter == pliveVideoParams->mapCameraParams.end())
+	{
+		printf("can not find camera:%s, deviceip length = %d \n", deviceip, strlen(deviceip));
+		pliveVideoParams->cameraParamMutex.unlock();
+		return -1;
+	}
+
+	printf("setdeviceinfo set cid:%s \n", deviceip);
+
+	CameraParams *param = iter->second;//pliveVideoParams->mapCameraParams[deviceip];
+	if( param )
+		delete param;
+
+	pliveVideoParams->mapCameraParams.erase(iter);
 
 	pliveVideoParams->cameraParamMutex.unlock();
 
@@ -151,7 +192,7 @@ int getremotertpport(osip_message_t * message)
 	return atoi(videomedia->m_port);
 }
 
-//ÓëÏà»ú½øĞĞÏûÏ¢½»»»µÄÖ÷Ïß³Ì
+//ä¸ç›¸æœºè¿›è¡Œæ¶ˆæ¯äº¤æ¢çš„ä¸»çº¿ç¨‹
 int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 {
     pthread_setname_np(pthread_self(), "sip_thread");
@@ -159,10 +200,10 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 	gb28181Params *p28181Params = &pliveVideoParams->gb28181Param;
 	struct eXosip_t * peCtx = p28181Params->eCtx;
 
-	//¼àÌı²¢»Ø¸´ÉãÏñ»úÏûÏ¢
+	//ç›‘å¬å¹¶å›å¤æ‘„åƒæœºæ¶ˆæ¯
 	while (p28181Params->running)
 	{
-		//´¦ÀíÊÂ¼ş
+		//å¤„ç†äº‹ä»¶
 		eXosip_event_t *je = eXosip_event_wait(peCtx, 1, 4);
 		if (je == NULL)
 		{
@@ -172,7 +213,7 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 
 		switch (je->type)
 		{
-			case EXOSIP_MESSAGE_NEW:				//ĞÂÏûÏ¢µ½À´
+			case EXOSIP_MESSAGE_NEW:				//æ–°æ¶ˆæ¯åˆ°æ¥
 			{
 				printf("new msg method:%s\n", je->request->sip_method);
 				if (MSG_IS_REGISTER(je->request))
@@ -218,7 +259,7 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 				RegisterSuccess(peCtx, je);
 				break;
 			}
-			case EXOSIP_MESSAGE_ANSWERED:				//²éÑ¯
+			case EXOSIP_MESSAGE_ANSWERED:				//æŸ¥è¯¢
 			{
 				printf("answered method:%s\n", je->request->sip_method);
 				RegisterSuccess(peCtx, je);
@@ -256,7 +297,7 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 				RegisterSuccess(peCtx, je);
 				break;
 			}
-			case EXOSIP_CALL_RELEASED:         //ÇëÇóÊÓÆµÁ÷»Ø¸´³É¹¦
+			case EXOSIP_CALL_RELEASED:         //è¯·æ±‚è§†é¢‘æµå›å¤æˆåŠŸ
 			{
 				printf("recv EXOSIP_CALL_RELEASED\n");
 				RegisterSuccess(peCtx, je);
@@ -283,10 +324,10 @@ int MsgThreadProc(liveVideoStreamParams *pliveVideoParams)
 
 struct eXosip_t *mysip_init(int localport)
 {
-	//³õÊ¼»¯¸ú×ÙĞÅÏ¢
+	//åˆå§‹åŒ–è·Ÿè¸ªä¿¡æ¯
 	TRACE_INITIALIZE(6, NULL);
 
-	//³õÊ¼»¯eXosipºÍosipÕ»
+	//åˆå§‹åŒ–eXosipå’Œosipæ ˆ
 	struct eXosip_t *eCtx = eXosip_malloc();
 	if ( !eCtx )
 	{
@@ -302,7 +343,7 @@ struct eXosip_t *mysip_init(int localport)
 		return NULL;
 	}
 
-	//´ò¿ªÒ»¸öUDP socket ½ÓÊÕĞÅºÅ
+	//æ‰“å¼€ä¸€ä¸ªUDP socket æ¥æ”¶ä¿¡å·
 	ret = eXosip_listen_addr(eCtx, IPPROTO_UDP, NULL, localport, AF_INET, 0);
 	if (ret != OSIP_SUCCESS)
 	{
@@ -325,7 +366,7 @@ int mysip_uninit(struct eXosip_t *eCtx)
 	return 0;
 }
 
-//ÇëÇóÊÓÆµĞÅÏ¢£¬SDPĞÅÏ¢
+//è¯·æ±‚è§†é¢‘ä¿¡æ¯ï¼ŒSDPä¿¡æ¯
 int sendInvitePlay(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
 {
 	gb28181Params *p28181Params = &pliveVideoParams->gb28181Param;
@@ -368,7 +409,7 @@ int sendInvitePlay(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
 	return 0;
 }
 
-//Í£Ö¹ÊÓÆµ»Ø´«
+//åœæ­¢è§†é¢‘å›ä¼ 
 int sendPlayBye(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
 {
 	struct eXosip_t *peCtx = pliveVideoParams->gb28181Param.eCtx;
@@ -379,7 +420,7 @@ int sendPlayBye(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
 	return 0;
 }
 
-//ÑéÖ¤Ïà»ú×´Ì¬
+//éªŒè¯ç›¸æœºçŠ¶æ€
 int checkCameraStatus(liveVideoStreamParams *pliveVideoParams, CameraParams *p)
 {
 	int i;

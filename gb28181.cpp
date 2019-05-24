@@ -4,31 +4,6 @@
 	#include <arpa/inet.h>
 #else
 	#include <winsock2.h>
-
-	#pragma comment(lib, "ws2_32.lib")
-	#pragma comment(lib, "mxml1.lib")
-	#pragma comment(lib, "eXosip.lib")
-	#pragma comment(lib, "libcares.lib")
-	#pragma comment(lib, "osip2.lib")
-
-	//Dnsapi.lib;Iphlpapi.lib;ws2_32.lib;eXosip.lib;osip2.lib;osipparser2.lib;Qwave.lib;libcares.lib;delayimp.lib;
-	//忽略 libcmt.lib默认库
-	#pragma comment(lib, "Dnsapi.lib")
-	#pragma comment(lib, "Iphlpapi.lib")
-	#pragma comment(lib, "osipparser2.lib")
-	#pragma comment(lib, "Qwave.lib")
-	#pragma comment(lib, "delayimp.lib")
-
-	#ifdef DEBUG
-	#pragma comment(lib, "jrtplib_d.lib") 
-	#pragma comment(lib,"jthread_d.lib")
-	#pragma comment(lib,"WS2_32.lib")
-	#else
-	#pragma comment(lib, "jrtplib.lib") 
-	#pragma comment(lib,"jthread.lib")
-	#pragma comment(lib,"WS2_32.lib")
-	#endif
-
 #endif // WIN32
 
 #include "mysip.h"
@@ -107,9 +82,10 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 	int i, num;
 
 	jrtplib::RTPUDPv4TransmissionParams transparams;
-	jrtplib::RTPSessionParams sessparams;
+	transparams.SetRTPReceiveBuffer(1 * 1024 * 1024);
 
-	sessparams.SetOwnTimestampUnit(1.0 / 9000.0);
+	jrtplib::RTPSessionParams sessparams;
+	sessparams.SetOwnTimestampUnit(1.0 / 90000.0);
 	sessparams.SetAcceptOwnPackets(true);
 	
 	uint16_t localport;
@@ -129,8 +105,7 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 			rtpport = i;
 			return 0;
 		}
-		//printf("getrtpsession error: %d, %s \n", status, jrtplib::RTPGetErrorString(status).c_str() );
-		printf("getrtpsession error: %d \n", status );
+		printf("getrtpsession error: %d, %s \n", status, jrtplib::RTPGetErrorString(status).c_str() );
 		sess.Destroy();
 	}
 	return -1;
@@ -138,12 +113,12 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 
 int checkErrorCount(CameraParams *p, int &error_count)
 {
-	if( error_count == 7 )
+	if( error_count == 7 * 1000 )
 	{
 		printf("stream connection error: sendPlayBye \n");
 		sendPlayBye(p->pliveVideoParams, p);
 	}
-	else if( error_count >= 10 )
+	else if( error_count >= 10 * 1000 )
 	{
 		printf("stream connection error: sendInvitePlay \n");
 
@@ -203,65 +178,51 @@ int jrtplib_rtp_recv_thread(void* arg)
 	while (p->running)
 	{
 #ifndef RTP_SUPPORT_THREAD
-		bool dataavailable = true;
-		int ret = p->sess.WaitForIncomingData(jrtplib::RTPTime(1, 1000), &dataavailable);
+		printf("not define RTP_SUPPORT_THREAD \n");
+#endif
 
-		if( !dataavailable )
-			printf("ret = %d, dataavailable=%d \n", ret, dataavailable);
-		if( !dataavailable )
-			error_count++;
-
-		if( p->sess.Poll() < 0 )
-		{
-			printf("sess.Poll() error \n");
-			break;
-		}
-#endif // RTP_SUPPORT_THREAD
-
+		int needsleep = 0;
 		p->sess.BeginDataAccess();
 		if (p->sess.GotoFirstSourceWithData())
 		{
 			do
 			{
-				while( 1 )
+				if( jrtplib::RTPPacket *pack = p->sess.GetNextPacket() )
 				{
-					jrtplib::RTPPacket *pack = p->sess.GetNextPacket();
+//					printf("Got packet! %d \n", pack->GetPayloadLength());
 
-					if( !pack )
+					if( error_count < 7 * 1000 )
+						error_count = 0;
+					
+					uint32_t ts = pack->GetTimestamp();
+					if (ts >= last_ts || abs(int(ts - last_ts))/90000 >= 3600 )
 					{
-//						printf("jrtplib_rtp_recv_thread:packet is null \n");
-//						std::this_thread::sleep_for(std::chrono::milliseconds(1));
-						break;
+						ParsePsStream(psBuf, psLen, (char*)pack->GetPayloadData(), pack->GetPayloadLength(), p);
+						last_ts = ts;
 					}
-					else
-					{
-						if( error_count < 7 )
-							error_count = 0;
-						
-//						printf("Got packet! %d \n", pack->GetPayloadLength());
 
-						uint32_t ts = pack->GetTimestamp();
-						if (ts >= last_ts || abs(int(ts - last_ts))/90000 >= 3600 )
-						{
-							ParsePsStream(psBuf, psLen, (char*)pack->GetPayloadData(), pack->GetPayloadLength(), p);
-							last_ts = ts;
-						}
-
-						//写入文件
-	//					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
-						p->sess.DeletePacket(pack);
-					}
+					//写入文件
+//					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
+					p->sess.DeletePacket(pack);
 				}
 			} while (p->sess.GotoNextSourceWithData());
 		}
+		else
+		{
+//			printf("no data found \n");
+			needsleep = 1;
+			error_count++;
+		}
+
 		p->sess.EndDataAccess();
 
 		if( checkErrorCount(p, error_count) >= 0 )
 		{
 			last_ts = 0;
 		}
-
-//		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	
+		if( needsleep )		
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
 	p->sess.BYEDestroy(jrtplib::RTPTime(0, 1000), 0, 0);
@@ -371,6 +332,7 @@ int gb28181_stopstream(void *handle, char* deviceip)
 	param->rtpthread.join();
 
 	sendPlayBye(inst, param);
+	deletedeviceinfo(inst, deviceip);
 	return 0;
 }
 

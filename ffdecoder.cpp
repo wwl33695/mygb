@@ -14,7 +14,7 @@ extern "C" {
 }
 
 #ifndef USE_CAMBRICON
-//    #define USE_CAMBRICON
+    #define USE_CAMBRICON
 #endif
 
 #ifdef USE_CAMBRICON
@@ -155,9 +155,9 @@ int FFDecoder::CreateDecoder(int codec_id, int device)
     memset(&chn_attr, 0, sizeof(chn_attr));
     chn_attr.u32VdecDeviceID = device;  // 在device 0上创建解码通道
     chn_attr.enInputVideoCodec = codec_type;
-    chn_attr.enVideoMode = CN_VIDEO_MODE_FRAME;//CN_VIDEO_MODE_STREAM
-    chn_attr.u32MaxWidth = MAX_OUTPUT_WIDTH;  // 最大输入分辨率，只能解码此范围内的压缩数据
-    chn_attr.u32MaxHeight = MAX_OUTPUT_HEIGHT;
+    chn_attr.enVideoMode = CN_VIDEO_MODE_STREAM;//CN_VIDEO_MODE_FRAME
+    chn_attr.u32MaxWidth = m_width;//MAX_OUTPUT_WIDTH;  // 最大输入分辨率，只能解码此范围内的压缩数据
+    chn_attr.u32MaxHeight = m_height;//MAX_OUTPUT_HEIGHT;
     chn_attr.u32TargetWidth = m_width;//1920;//st->codecpar->width;  // 输出分辨率，解码图像resize到此分辨率输出
     chn_attr.u32TargetHeight = m_height;//1080;//st->codecpar->height;
     chn_attr.enOutputPixelFormat = CN_PIXEL_FORMAT_RGB24;
@@ -405,7 +405,7 @@ bool FFDecoder::GetCodec(int codec_id, int gpu)
     } else if (codec_id == AV_CODEC_ID_MPEG4) {
         forced_codec_name = "mpeg4_cuvid";
     }
-/*
+
     if (forced_codec_name) {
         codec = avcodec_find_decoder_by_name(forced_codec_name);
         if (codec) {
@@ -420,7 +420,6 @@ bool FFDecoder::GetCodec(int codec_id, int gpu)
             }
         }
     }
-*/
     if (!codec) {
         codec = avcodec_find_decoder((AVCodecID)codec_id);
     }
@@ -448,7 +447,6 @@ bool FFDecoder::GetCodec(int codec_id, int gpu)
     m_parser->width = m_parser->height = -1;
 
     m_avctx = avctx;
-
 #ifndef USE_CAMBRICON    
     if( !m_decode.joinable() )
         m_decode = std::thread(DecodeThread, this);
@@ -539,7 +537,7 @@ void FFDecoder::DecodeThread(FFDecoder *that)
 
         if( !pkt )
         {
-            usleep(20 * 1000);
+            usleep(1 * 1000);
             continue;
         }
 
@@ -580,10 +578,7 @@ void FFDecoder::DecodeThread(FFDecoder *that)
 
 #endif
 
-//        if ( pkt && pkt->data )
         av_packet_free(&pkt);
-
-        usleep(10 * 1000);
     }
 
 #ifdef USE_CAMBRICON

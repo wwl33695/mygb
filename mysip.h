@@ -76,7 +76,7 @@ typedef struct {
 } CameraParams;
 
 struct liveVideoStreamParams {
-	std::map<std::string, CameraParams> mapCameraParams;
+	std::map<std::string, CameraParams*> mapCameraParams;
 	std::mutex cameraParamMutex;
 
 	gb28181Params gb28181Param;
@@ -101,5 +101,7 @@ int sendPlayBye(liveVideoStreamParams *pliveVideoParams, CameraParams *p);
 
 //验证相机状态
 int checkCameraStatus(liveVideoStreamParams *pliveVideoParams, CameraParams *p);
+
+int deletedeviceinfo(liveVideoStreamParams *pliveVideoParams, char* deviceip);
 
 #endif
