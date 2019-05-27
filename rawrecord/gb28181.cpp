@@ -27,6 +27,7 @@ typedef struct RTP_HEADER
 
 #define APP_ERR printf
 
+//////////////////////////////////////////////////////////////////////
 //初始化udp套接字
 int init_udpsocket(int port)
 {
@@ -40,6 +41,23 @@ int init_udpsocket(int port)
 		return -1;
 	}
 	
+    /* Set socket option */
+    int flag = 1;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(int)) < 0) {
+        perror("setsockopt()");
+        return -1;
+    }
+
+	/*set enable MULTICAST LOOP */
+	int loop = 10*1024*1024;
+	err = setsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (const char*)&loop, sizeof(loop));
+	//err = setsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
+	if (err < 0)
+	{
+		APP_ERR("setsockopt IP_MULTICAST_LOOP failed, port:%d", port);
+		return -1;
+	}
+
 	struct sockaddr_in servaddr;
 	memset(&servaddr, 0, sizeof(struct sockaddr_in));
 	servaddr.sin_family = AF_INET;
@@ -50,18 +68,9 @@ int init_udpsocket(int port)
 	if (err < 0)
 	{
 		APP_ERR("bind failed, port:%d", port);
-		return -2;
+		return -1;
 	}
 
-	/*set enable MULTICAST LOOP */
-	int loop = 4*1024*1024;
-	err = setsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (const char*)&loop, sizeof(loop));
-	//err = setsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
-	if (err < 0)
-	{
-		APP_ERR("setsockopt IP_MULTICAST_LOOP failed, port:%d", port);
-		return -3;
-	}
 
 	return socket_fd;
 }
@@ -81,7 +90,62 @@ int recv_udpsocket(int socket_fd, char* rtpbuf, int buflen)
 	return recvfrom(socket_fd, rtpbuf, buflen, 0, (struct sockaddr*)&servaddr, &addr_len);
 }
 
-////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////
+#include <event.h>
+#include <event2/listener.h>
+
+void read_cb(int fd, short event, void *arg) 
+{
+	CameraParams *p = (CameraParams *)arg;
+
+	RTPData packdata;
+	int recvLen = recv_udpsocket(p->sock_fd, packdata.data, sizeof(packdata.data));
+	printf("recvfrom, recvLen=%d \n",recvLen);
+
+	//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
+	if (recvLen > 12)
+	{
+//			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
+		//写入文件
+//			fwrite(packdata.data+12, 1, recvLen-12, p->fpH264);
+		packdata.length =  recvLen;
+		
+		p->queueMutex.lock();
+		p->queueData.push(packdata);
+		p->queueMutex.unlock();
+	}
+}
+
+int runeventloop(int port, void *arg) {
+    struct event  ev;
+
+    /* Init. event */
+    if (event_init() == NULL) {
+        printf("event_init() failed\n");
+        return -1;
+    }
+
+    int sock_fd = init_udpsocket(port);
+    if( sock_fd < 0 )
+    {
+        printf("init_udpsocket failed\n");
+        return -1;
+    }
+	CameraParams *p = (CameraParams *)arg;
+	p->sock_fd = sock_fd;
+
+    /* Init one event and add to active events */
+    event_set(&ev, sock_fd, EV_READ | EV_PERSIST, &read_cb, arg);
+    if (event_add(&ev, NULL) == -1) {
+        printf("event_add() failed\n");
+    }
+
+    /* Enter event loop */
+    event_dispatch();
+
+    return 0;
+}
+////////////////////////////////////////////////////////////////////////////
 int ParsePsStream(char* psBuf, uint32_t &psLen, char* rtpPayload, uint32_t rtpPayloadLength, CameraParams *p)
 {
 	static uint32_t cnt = 0;
@@ -247,6 +311,21 @@ int rtp_recv_thread(void *arg)
 
 	//获取相机参数
 	CameraParams *p = (CameraParams *)arg;
+	
+	//写入视频文件
+	//获取当前程序路径
+	char filename[MAX_PATH];
+	std::string strPath = p->sipId;
+	snprintf(filename, MAX_PATH, "%s.264", strPath.c_str());
+	if( p->writefile )
+		p->fpH264 = fopen(filename, "wb");
+
+	if (p->fpH264 == NULL)
+	{
+		printf("fopen %s failed \n", filename);
+	}
+
+	runeventloop(p->recvPort, arg);
 
 	int socket_fd = init_udpsocket(p->recvPort);
 	if (socket_fd < 0)
@@ -269,19 +348,6 @@ int rtp_recv_thread(void *arg)
 	WSADATA dat;
 	WSAStartup(MAKEWORD(2, 2), &dat);
 #endif // WIN32
-
-	//写入视频文件
-	//获取当前程序路径
-	char filename[MAX_PATH];
-	std::string strPath = p->sipId;
-	snprintf(filename, MAX_PATH, "%s.264", strPath.c_str());
-	if( p->writefile )
-		p->fpH264 = fopen(filename, "wb");
-
-	if (p->fpH264 == NULL)
-	{
-		printf("fopen %s failed \n", filename);
-	}
 
 	char rtpbuf[1600] = {0};
 	while (p->running)

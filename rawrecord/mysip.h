@@ -85,6 +85,8 @@ typedef struct {
 
 	std::queue<RTPData> queueData;
 	std::mutex queueMutex;
+
+	int sock_fd;
 } CameraParams;
 
 struct liveVideoStreamParams {
