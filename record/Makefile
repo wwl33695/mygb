@@ -3,7 +3,7 @@ CPP = g++
 
 ########################################
 CFLAGS = -fPIC -lpthread
-CPPFLAGS = -fPIC -g -w -std=c++11 -I../libosip2-5.0.0/include -I../libexosip2-5.0.0/include/ -I../jrtplib-3.11.1/include \
+CPPFLAGS = -fPIC -g -w -std=c++11 -I../libosip2-5.0.0/include -I../libexosip2-5.0.0/include/ -I/usr/local/include/jrtplib3 \
 	   -I../ffmpeg-3.4.5/include/ 
 
 LINK_FLAGS = -w -g -D__STDC_CONSTANT_MACROS

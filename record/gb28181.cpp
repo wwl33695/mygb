@@ -184,31 +184,11 @@ int jrtplib_rtp_recv_thread(void* arg)
 #endif
 
 		int needsleep = 0;
+		jrtplib::RTPPacket *pack = NULL;
 		p->sess.BeginDataAccess();
 		if (p->sess.GotoFirstSourceWithData())
 		{
-			do
-			{
-//				while( jrtplib::RTPPacket *pack = p->sess.GetNextPacket() )
-				if( jrtplib::RTPPacket *pack = p->sess.GetNextPacket() )
-				{
-//					printf("Got packet! %d \n", pack->GetPayloadLength());
-
-					if( error_count < 7 * 1000 )
-						error_count = 0;
-					
-					uint32_t ts = pack->GetTimestamp();
-					if (ts >= last_ts || abs(int(ts - last_ts))/90000 >= 3600 )
-					{
-						ParsePsStream(psBuf, psLen, (char*)pack->GetPayloadData(), pack->GetPayloadLength(), p);
-						last_ts = ts;
-					}
-
-					//写入文件
-//					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
-					p->sess.DeletePacket(pack);
-				}
-			} while (p->sess.GotoNextSourceWithData());
+			pack = p->sess.GetNextPacket();
 		}
 		else
 		{
@@ -218,6 +198,26 @@ int jrtplib_rtp_recv_thread(void* arg)
 		}
 
 		p->sess.EndDataAccess();
+
+		if( pack )
+		{
+//					printf("Got packet! %d \n", pack->GetPayloadLength());
+
+			if( error_count < 7 * 1000 )
+				error_count = 0;
+			
+			uint32_t ts = pack->GetTimestamp();
+			if (ts >= last_ts || abs(int(ts - last_ts))/90000 >= 3600 )
+			{
+				ParsePsStream(psBuf, psLen, (char*)pack->GetPayloadData(), pack->GetPayloadLength(), p);
+				last_ts = ts;
+			}
+
+			//写入文件
+//					fwrite(pack->GetPayloadData(), 1, pack->GetPayloadLength(), p->fpH264);
+			p->sess.DeletePacket(pack);
+		}
+
 
 		if( checkErrorCount(p, error_count) >= 0 )
 		{
