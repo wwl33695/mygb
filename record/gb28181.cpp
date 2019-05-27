@@ -82,7 +82,7 @@ int getrtpsession(jrtplib::RTPSession &sess, int &rtpport)
 	int i, num;
 
 	jrtplib::RTPUDPv4TransmissionParams transparams;
-	transparams.SetRTPReceiveBuffer(1 * 1024 * 1024);
+	transparams.SetRTPReceiveBuffer(10 * 1024 * 1024);
 
 	jrtplib::RTPSessionParams sessparams;
 	sessparams.SetOwnTimestampUnit(1.0 / 90000.0);
