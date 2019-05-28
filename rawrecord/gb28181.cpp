@@ -3,6 +3,8 @@
 	#include <netinet/in.h>
 	#include <arpa/inet.h>
 	#include <unistd.h>
+	#include <fcntl.h>
+	#include <errno.h>
 #else
 	#include <winsock2.h>
 #endif // WIN32
@@ -48,15 +50,42 @@ int init_udpsocket(int port)
         return -1;
     }
 
+
+    // 设置UDP服务Socket为非阻塞模式
+    int sockflag;
+    if ((sockflag = fcntl(socket_fd, F_GETFL, 0)) < 0)
+    {
+        printf("openServer: get socket(%d) flag error=%d(%s)", socket_fd, errno, strerror(errno));
+        return -1;
+    }
+    sockflag = sockflag | O_NONBLOCK;
+    if (fcntl(socket_fd, F_SETFL, sockflag) < 0)
+    {
+        printf("openServer: set socket(%d) flag error=%d(%s)", socket_fd, errno, strerror(errno));
+        return -1;
+    }
+
+
+//    vi /etc/sysctl.conf，添加一行
+//	net.core.rmem_max = 4194304
+//	sysctl -p，使参数生效。再次启动程序，可以看到缓冲也跟着增大了
+	
 	/*set enable MULTICAST LOOP */
-	int loop = 10*1024*1024;
-	err = setsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (const char*)&loop, sizeof(loop));
-	//err = setsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
+	int loop = 2*1024*1024;
+	socklen_t optlen = sizeof(loop);
+	err = setsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (const char*)&loop, optlen);
 	if (err < 0)
 	{
-		APP_ERR("setsockopt IP_MULTICAST_LOOP failed, port:%d", port);
+		APP_ERR("setsockopt failed \n");
 		return -1;
 	}
+    int rcvRealSize = -1;
+    if (getsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, &rcvRealSize, &optlen) < 0)
+    {
+		APP_ERR("getsockopt failed \n");
+        return -1;
+    }
+	APP_ERR("getsockopt rcvRealSize:%d \n", rcvRealSize);
 
 	struct sockaddr_in servaddr;
 	memset(&servaddr, 0, sizeof(struct sockaddr_in));
@@ -71,7 +100,6 @@ int init_udpsocket(int port)
 		return -1;
 	}
 
-
 	return socket_fd;
 }
 
@@ -79,6 +107,26 @@ int init_udpsocket(int port)
 void release_udpsocket(int socket_fd)
 {
 	close(socket_fd);
+}
+
+int select_udpsocket(int socket_fd)
+{
+    static fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(socket_fd, &fds);
+
+    static struct timeval tv = {0, 20000};
+    int readyNum = select(socket_fd+1, &fds, NULL, NULL, &tv);
+    if (readyNum < 0)
+    {
+        printf("monUdpSock: select error=%d(%s)!!!\n", errno, strerror(errno));
+        // 异常处理
+        return -1;
+    }
+    else if (readyNum == 0)
+        return -1; // select超时，do nothing
+
+    return 0;
 }
 
 int recv_udpsocket(int socket_fd, char* rtpbuf, int buflen)
@@ -100,7 +148,7 @@ void read_cb(int fd, short event, void *arg)
 
 	RTPData packdata;
 	int recvLen = recv_udpsocket(p->sock_fd, packdata.data, sizeof(packdata.data));
-	printf("recvfrom, recvLen=%d \n",recvLen);
+//	printf("recvfrom, recvLen=%d event=%d \n",recvLen, event);
 
 	//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
 	if (recvLen > 12)
@@ -133,9 +181,12 @@ int runeventloop(int port, void *arg) {
     }
 	CameraParams *p = (CameraParams *)arg;
 	p->sock_fd = sock_fd;
+	
+	evutil_make_socket_nonblocking(sock_fd);
 
     /* Init one event and add to active events */
     event_set(&ev, sock_fd, EV_READ | EV_PERSIST, &read_cb, arg);
+//    event_set(&ev, sock_fd, EV_READ | EV_PERSIST | EV_ET, &read_cb, arg);
     if (event_add(&ev, NULL) == -1) {
         printf("event_add() failed\n");
     }
@@ -325,7 +376,7 @@ int rtp_recv_thread(void *arg)
 		printf("fopen %s failed \n", filename);
 	}
 
-	runeventloop(p->recvPort, arg);
+//	runeventloop(p->recvPort, arg);
 
 	int socket_fd = init_udpsocket(p->recvPort);
 	if (socket_fd < 0)
@@ -352,22 +403,32 @@ int rtp_recv_thread(void *arg)
 	char rtpbuf[1600] = {0};
 	while (p->running)
 	{	
-		RTPData packdata;
-		int recvLen = recv_udpsocket(socket_fd, packdata.data, sizeof(packdata.data));
-//		int recvLen = recv_udpsocket(socket_fd, rtpbuf, sizeof(rtpbuf));
-		printf("recvfrom, recvLen=%d \n",recvLen);
-
-		//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
-		if (recvLen > 12)
+		if( select_udpsocket(socket_fd) < 0 )
 		{
-//			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
-			//写入文件
-//			fwrite(packdata.data+12, 1, recvLen-12, p->fpH264);
-			packdata.length =  recvLen;
-			
-			p->queueMutex.lock();
-			p->queueData.push(packdata);
-			p->queueMutex.unlock();
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			continue;
+		}
+
+		while( 1 )
+		{		
+			RTPData packdata;
+			int recvLen = recv_udpsocket(socket_fd, packdata.data, sizeof(packdata.data));
+			printf("recvfrom, recvLen=%d \n",recvLen);
+
+			//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
+			if (recvLen > 12)
+			{
+	//			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
+				//写入文件
+	//			fwrite(packdata.data+12, 1, recvLen-12, p->fpH264);
+				packdata.length =  recvLen;
+				
+				p->queueMutex.lock();
+				p->queueData.push(packdata);
+				p->queueMutex.unlock();
+			}
+			else
+				break;
 		}
 	}
 
