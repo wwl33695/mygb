@@ -329,9 +329,32 @@ int checkErrorCount(CameraParams *p, int &error_count)
 int parse_thread(void *arg)
 {
     pthread_setname_np(pthread_self(), "parse_thread");
-
 	//获取相机参数
 	CameraParams *p = (CameraParams *)arg;
+
+	//写入视频文件
+	//获取当前程序路径
+	char filename[MAX_PATH];
+	std::string strPath = p->sipId;
+	snprintf(filename, MAX_PATH, "%s.264", strPath.c_str());
+	if( p->writefile )
+		p->fpH264 = fopen(filename, "wb");
+
+	if (p->fpH264 == NULL)
+	{
+		printf("fopen %s failed \n", filename);
+	}
+
+	char *psBuf = (char *)malloc(PS_BUF_SIZE);
+	if (psBuf == NULL)
+	{
+		//APP_ERR("malloc failed");
+		printf("malloc failed \n");
+		return -1;
+	}
+	memset(psBuf, 0, PS_BUF_SIZE);
+	uint32_t psLen = 0;
+
 	while (p->running)
 	{
 		RTPData packdata = {0};
@@ -349,9 +372,23 @@ int parse_thread(void *arg)
 		p->queueData.pop();
 		p->queueMutex.unlock();
 
-		fwrite(packdata.data+12, 1, packdata.length-12, p->fpH264);
+//		fwrite(packdata.data+12, 1, packdata.length-12, p->fpH264);
+		ParsePsStream(psBuf, psLen, (char*)packdata.data+12, packdata.length-12, p);
+				//写入文件
 	}
 	
+	if( p->fpH264 )
+	{
+		fclose(p->fpH264);
+		p->fpH264 = NULL;
+	}
+
+	if( psBuf )
+	{
+		free(psBuf);
+		psBuf = NULL;
+	}
+
 	return 0;
 }
 
@@ -363,19 +400,6 @@ int rtp_recv_thread(void *arg)
 	//获取相机参数
 	CameraParams *p = (CameraParams *)arg;
 	
-	//写入视频文件
-	//获取当前程序路径
-	char filename[MAX_PATH];
-	std::string strPath = p->sipId;
-	snprintf(filename, MAX_PATH, "%s.264", strPath.c_str());
-	if( p->writefile )
-		p->fpH264 = fopen(filename, "wb");
-
-	if (p->fpH264 == NULL)
-	{
-		printf("fopen %s failed \n", filename);
-	}
-
 //	runeventloop(p->recvPort, arg);
 
 	int socket_fd = init_udpsocket(p->recvPort);
@@ -384,16 +408,6 @@ int rtp_recv_thread(void *arg)
 		printf("init_udpsocket error: port %d \n", p->recvPort);
 		return -1;
 	}
-
-	char *psBuf = (char *)malloc(PS_BUF_SIZE);
-	if (psBuf == NULL)
-	{
-		//APP_ERR("malloc failed");
-		printf("malloc failed \n");
-		return -1;
-	}
-	memset(psBuf, 0, PS_BUF_SIZE);
-	uint32_t psLen = 0;
 
 #ifdef WIN32
 	WSADATA dat;
@@ -413,14 +427,11 @@ int rtp_recv_thread(void *arg)
 		{		
 			RTPData packdata;
 			int recvLen = recv_udpsocket(socket_fd, packdata.data, sizeof(packdata.data));
-			printf("recvfrom, recvLen=%d \n",recvLen);
+//			printf("recvfrom, recvLen=%d \n",recvLen);
 
 			//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
 			if (recvLen > 12)
 			{
-	//			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
-				//写入文件
-	//			fwrite(packdata.data+12, 1, recvLen-12, p->fpH264);
 				packdata.length =  recvLen;
 				
 				p->queueMutex.lock();
@@ -439,18 +450,6 @@ int rtp_recv_thread(void *arg)
 #endif // WIN32
 
 //	p->decoder.Stop();
-
-	if( p->fpH264 )
-	{
-		fclose(p->fpH264);
-		p->fpH264 = NULL;
-	}
-
-	if( psBuf )
-	{
-		free(psBuf);
-		psBuf = NULL;
-	}
 
 	return 0;
 }
