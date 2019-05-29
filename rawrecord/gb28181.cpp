@@ -50,8 +50,7 @@ int init_udpsocket(int port)
         return -1;
     }
 
-
-    // 设置UDP服务Socket为非阻塞模式
+    // 设置UDP服务Socket为非阻塞模式,阻塞和非阻塞模式下socket读写性能无差别
     int sockflag;
     if ((sockflag = fcntl(socket_fd, F_GETFL, 0)) < 0)
     {
@@ -64,7 +63,6 @@ int init_udpsocket(int port)
         printf("openServer: set socket(%d) flag error=%d(%s)", socket_fd, errno, strerror(errno));
         return -1;
     }
-
 
 //    vi /etc/sysctl.conf，添加一行
 //	net.core.rmem_max = 4194304
