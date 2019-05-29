@@ -150,7 +150,7 @@ void read_cb(int fd, short event, void *arg)
 	{
 		RTPData packdata;
 		int recvLen = recv_udpsocket(p->sock_fd, packdata.data, sizeof(packdata.data));
-//		printf("read_cb recvfrom, recvLen=%d event=%d \n",recvLen, event);
+//		printf("read_cb recvfrom, recvLen=%d event=%d \n",recvLen, event);//打印日志影响socket读取性能，导致丢包
 
 		//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
 		if (recvLen > 12)
@@ -432,7 +432,7 @@ int rtp_recv_thread(void *arg)
 		{		
 			RTPData packdata;
 			int recvLen = recv_udpsocket(socket_fd, packdata.data, sizeof(packdata.data));
-//			printf("rtp_recv_thread recvfrom, recvLen=%d \n",recvLen);
+//			printf("rtp_recv_thread recvfrom, recvLen=%d \n",recvLen);//打印日志影响socket读取性能，导致丢包
 
 			//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
 			if (recvLen > 12)
