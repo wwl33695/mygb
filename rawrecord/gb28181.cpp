@@ -146,22 +146,27 @@ void read_cb(int fd, short event, void *arg)
 {
 	CameraParams *p = (CameraParams *)arg;
 
-	RTPData packdata;
-	int recvLen = recv_udpsocket(p->sock_fd, packdata.data, sizeof(packdata.data));
-//	printf("recvfrom, recvLen=%d event=%d \n",recvLen, event);
-
-	//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
-	if (recvLen > 12)
+	do
 	{
-//			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
-		//写入文件
-//			fwrite(packdata.data+12, 1, recvLen-12, p->fpH264);
-		packdata.length =  recvLen;
-		
-		p->queueMutex.lock();
-		p->queueData.push(packdata);
-		p->queueMutex.unlock();
-	}
+		RTPData packdata;
+		int recvLen = recv_udpsocket(p->sock_fd, packdata.data, sizeof(packdata.data));
+//		printf("read_cb recvfrom, recvLen=%d event=%d \n",recvLen, event);
+
+		//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
+		if (recvLen > 12)
+		{
+	//			ParsePsStream(psBuf, psLen, (char*)rtpbuf+12, recvLen-12, p);
+			//写入文件
+	//			fwrite(packdata.data+12, 1, recvLen-12, p->fpH264);
+			packdata.length =  recvLen;
+			
+			p->queueMutex.lock();
+			p->queueData.push(packdata);
+			p->queueMutex.unlock();
+		}
+		else
+			break;		
+	}while( 1 );
 }
 
 int runeventloop(int port, void *arg) {
@@ -185,8 +190,8 @@ int runeventloop(int port, void *arg) {
 	evutil_make_socket_nonblocking(sock_fd);
 
     /* Init one event and add to active events */
-    event_set(&ev, sock_fd, EV_READ | EV_PERSIST, &read_cb, arg);
-//    event_set(&ev, sock_fd, EV_READ | EV_PERSIST | EV_ET, &read_cb, arg);
+//    event_set(&ev, sock_fd, EV_READ | EV_PERSIST, &read_cb, arg);
+    event_set(&ev, sock_fd, EV_READ | EV_PERSIST | EV_ET, &read_cb, arg);
     if (event_add(&ev, NULL) == -1) {
         printf("event_add() failed\n");
     }
@@ -372,9 +377,9 @@ int parse_thread(void *arg)
 		p->queueData.pop();
 		p->queueMutex.unlock();
 
+		//写入文件
 //		fwrite(packdata.data+12, 1, packdata.length-12, p->fpH264);
 		ParsePsStream(psBuf, psLen, (char*)packdata.data+12, packdata.length-12, p);
-				//写入文件
 	}
 	
 	if( p->fpH264 )
@@ -427,7 +432,7 @@ int rtp_recv_thread(void *arg)
 		{		
 			RTPData packdata;
 			int recvLen = recv_udpsocket(socket_fd, packdata.data, sizeof(packdata.data));
-//			printf("recvfrom, recvLen=%d \n",recvLen);
+//			printf("rtp_recv_thread recvfrom, recvLen=%d \n",recvLen);
 
 			//如果接收到字字段长度还没有rtp数据头长，就直接将数据舍弃
 			if (recvLen > 12)
