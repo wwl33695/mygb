@@ -160,7 +160,7 @@ int FFDecoder::CreateDecoder(int codec_id, int device)
     chn_attr.u32MaxHeight = m_height;//MAX_OUTPUT_HEIGHT;
     chn_attr.u32TargetWidth = m_width;//1920;//st->codecpar->width;  // 输出分辨率，解码图像resize到此分辨率输出
     chn_attr.u32TargetHeight = m_height;//1080;//st->codecpar->height;
-    chn_attr.enOutputPixelFormat = CN_PIXEL_FORMAT_RGB24;
+    chn_attr.enOutputPixelFormat = CN_PIXEL_FORMAT_BGR24;
     chn_attr.u64UserData = (CN_U64)this;  // 设置回调函数的用户数据指针，回调函数中需要使用的数据
     chn_attr.pImageCallBack = (CN_VDEC_IMAGE_CALLBACK)DecodeCallback;
 
@@ -179,6 +179,7 @@ int FFDecoder::CreateDecoder(int codec_id, int device)
         buffers[iloop].len = frame_size;
     }
     chn_attr.mluP2pAttr.buffer_num = OUTPUT_BUFFER_NUM;
+    chn_attr.mluP2pAttr.buffer_type = CN_MLU_BUFFER;
     chn_attr.mluP2pAttr.p_buffers = buffers;
 
     // 创建通道
@@ -485,7 +486,7 @@ void FFDecoder::ReadThread(FFDecoder *that)
             printf("av_read_frame error '%s', exit thread!!!\n", av_make_error_string(errbuf, sizeof(errbuf), ret));
             break;
         } else if (ret == AVERROR(EAGAIN)) {
-            usleep(10 * 1000);
+//            usleep(10 * 1000);
             continue;
         } else if (pkt->stream_index != that->m_video_index) {
             av_packet_unref(pkt);
@@ -584,6 +585,7 @@ void FFDecoder::DecodeThread(FFDecoder *that)
 #ifdef USE_CAMBRICON
     if (that->m_useCambricon) {
         CN_MPI_VDEC_Destroy(that->h_decoder);  // 销毁通道
+        CN_MPI_Exit();
     }
 
     if (that->mlu_ptrs) {
